@@ -1,0 +1,354 @@
+{% extends "base.html" %}
+{% set title = "Dashboard | SENSE" %}
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+{% endblock %}
+{% block content %}
+<div class="container py-4">
+  <div class="page-header mb-4">
+    <div class="d-flex justify-content-between align-items-center">
+      <div>
+        <h2 class="fw-bold text-primary mb-2">Dashboard Global</h2>
+        <p class="text-secondary">Analisis keseluruhan rekaman wawancara</p>
+      </div>
+      <a href="{{ url_for('main.ingest') }}" class="btn btn-primary">
+        <i class="bi bi-plus-circle me-2"></i>Input Baru
+      </a>
+    </div>
+  </div>
+
+  {% if not records %}
+    <!-- Empty State -->
+    <div class="empty-state text-center py-5">
+      <div class="empty-icon mb-4">
+        <i class="bi bi-inbox"></i>
+      </div>
+      <h4 class="fw-bold text-secondary mb-2">Belum ada rekaman</h4>
+      <p class="text-secondary mb-4">Mulai dengan mengunggah rekaman audio pertama Anda</p>
+      <a href="{{ url_for('main.ingest') }}" class="btn btn-primary btn-lg">
+        <i class="bi bi-cloud-upload me-2"></i>Input Rekaman Pertama
+      </a>
+    </div>
+  {% else %}
+    <!-- Row 1: Top Cards -->
+    <div class="row g-4 mb-4">
+      <!-- Card: Total Audio -->
+      <div class="col-md-4">
+        <div class="stat-card h-100">
+          <div class="stat-icon bg-primary-subtle text-primary">
+            <i class="bi bi-file-earmark-music"></i>
+          </div>
+          <div class="stat-content">
+            <p class="stat-label">Total Audio</p>
+            <h3 class="stat-value">{{ total_audio }}</h3>
+            <p class="stat-desc">Rekaman yang telah diproses</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card: Ringkasan Emosi -->
+      <div class="col-md-4">
+        <div class="stat-card h-100">
+          <div class="stat-icon bg-gold text-dark">
+            <i class="bi bi-pie-chart"></i>
+          </div>
+          <div class="stat-content">
+            <p class="stat-label">Ringkasan Emosi</p>
+            <div class="emotion-bars mt-2">
+              {% for emotion, count in emotion_counts.items() %}
+              <div class="d-flex justify-content-between align-items-center mb-1">
+                <small class="text-secondary">{{ emotion }}</small>
+                <div class="progress flex-grow-1 mx-2" style="height: 6px;">
+                  <div class="progress-bar bg-primary" role="progressbar" style="width: {{ (count / total_audio * 100) if total_audio > 0 else 0 }}%"></div>
+                </div>
+                <small class="text-secondary">{{ count }}</small>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card: Kata Kunci Teratas -->
+      <div class="col-md-4">
+        <div class="stat-card h-100">
+          <div class="stat-icon bg-success-subtle text-success">
+            <i class="bi bi-tags"></i>
+          </div>
+          <div class="stat-content">
+            <p class="stat-label">Kata Kunci Teratas</p>
+            <div class="keyword-chips mt-2">
+              {% for word, freq in top_keywords[:8] %}
+              <span class="keyword-chip">{{ word }}</span>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Row 2: Charts -->
+    <div class="row g-4 mb-4">
+      <!-- Chart: Emosi per Program Studi -->
+      <div class="col-lg-6">
+        <div class="card-modern shadow-soft">
+          <h5 class="fw-bold text-primary mb-3">Emosi per Program Studi</h5>
+          <canvas id="emotionChart"></canvas>
+        </div>
+      </div>
+
+      <!-- Chart: Durasi Rata-rata -->
+      <div class="col-lg-6">
+        <div class="card-modern shadow-soft">
+          <h5 class="fw-bold text-primary mb-3">Durasi Rata-rata Wawancara</h5>
+          <canvas id="durationChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Wordcloud Global -->
+    <div class="card-modern shadow-soft mb-4">
+      <h5 class="fw-bold text-primary mb-3">Wordcloud Topik Wawancara</h5>
+      <div class="wordcloud-placeholder text-center py-5 bg-light rounded-3">
+        <i class="bi bi-cloud text-primary" style="font-size: 4rem;"></i>
+        <p class="text-secondary mt-3 mb-0">Wordcloud akan ditampilkan di sini</p>
+        <small class="text-muted">(Global wordcloud dari semua transkrip)</small>
+      </div>
+    </div>
+
+    <!-- Tabel History -->
+    <div class="card-modern shadow-soft">
+      <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <h5 class="fw-bold text-primary mb-0">History Rekaman</h5>
+        <div class="d-flex gap-2">
+          <form method="post" action="{{ url_for('main.summary') }}" id="summaryForm" style="display: none;" onsubmit="showSummaryLoading(event, this)">
+            <div id="selectedInputs"></div>
+            <button type="submit" class="btn btn-gold" id="generateBtn">
+              <i class="bi bi-file-text me-2"></i>Generate Summary (Selected) (<span id="selectedCount">0</span>)
+            </button>
+          </form>
+          <form method="post" action="{{ url_for('main.summary') }}" id="summaryAllForm" onsubmit="showSummaryLoading(event, this)">
+            <input type="hidden" name="generate_all" value="true">
+            <button type="submit" class="btn btn-outline-primary" id="generateAllBtn">
+              <i class="bi bi-file-text me-2"></i>Generate Summary (All)
+            </button>
+          </form>
+          <button type="button" class="btn btn-outline-danger" onclick="confirmDeleteAll()">
+            <i class="bi bi-trash me-2"></i>Hapus Semua
+          </button>
+        </div>
+      </div>
+
+      <!-- Search Bar -->
+      <div class="mb-3">
+        <input type="text" class="form-control" id="searchInput" placeholder="Cari berdasarkan kode audio, label partisipan, atau program studi...">
+      </div>
+
+      <div class="table-responsive">
+        <table class="table table-hover mb-0" id="recordsTable">
+          <thead class="table-light">
+            <tr>
+              <th width="50">
+                <input type="checkbox" class="form-check-input" id="checkAll">
+              </th>
+              <th>Kode Audio</th>
+              <th>Label Partisipan</th>
+              <th>Program Studi</th>
+              <th>Emosi Dominan</th>
+              <th>Status</th>
+              <th width="120">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for record in records %}
+            <tr data-record-id="{{ record.id }}" data-search-text="{{ (record.id + ' ' + record.get('label_partisipan', '') + ' ' + record.get('program_studi', '')).lower() }}">
+              <td>
+                <input type="checkbox" class="form-check-input record-checkbox" name="selected_ids" value="{{ record.id }}">
+              </td>
+              <td>
+                <div class="fw-semibold">{{ record.id[:8] }}...</div>
+              </td>
+              <td>{{ record.get('label_partisipan', 'N/A') }}</td>
+              <td>{{ record.get('program_studi', 'N/A') }}</td>
+              <td>
+                <span class="badge bg-primary">{{ record.get('dominant_emotion', 'Neutral') }}</span>
+              </td>
+              <td>
+                <span class="badge bg-success">Selesai</span>
+              </td>
+              <td>
+                <div class="btn-group btn-group-sm" role="group">
+                  <a href="{{ url_for('main.audio_detail', record_id=record.id) }}" class="btn btn-outline-primary" title="Lihat Detail">
+                    <i class="bi bi-eye"></i>
+                  </a>
+                  <button type="button" class="btn btn-outline-danger" onclick="confirmDelete('{{ record.id }}', '{{ record.audio_name }}')" title="Hapus">
+                    <i class="bi bi-trash"></i>
+                  </button>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% endif %}
+</div>
+
+<script>
+// Chart data
+const psEmotionData = {{ ps_emotion_data | tojson }};
+const psDurationData = {{ ps_avg_duration | tojson }};
+
+// Emotion Chart (Stacked Bar)
+const emotionCtx = document.getElementById('emotionChart');
+if (emotionCtx) {
+  const programs = Object.keys(psEmotionData);
+  const emotions = ['Neutral', 'Happy', 'Sad', 'Angry'];
+  const colors = {
+    'Neutral': 'rgba(108, 117, 125, 0.8)',
+    'Happy': 'rgba(40, 167, 69, 0.8)',
+    'Sad': 'rgba(0, 123, 255, 0.8)',
+    'Angry': 'rgba(220, 53, 69, 0.8)'
+  };
+  
+  new Chart(emotionCtx, {
+    type: 'bar',
+    data: {
+      labels: programs,
+      datasets: emotions.map(emotion => ({
+        label: emotion,
+        data: programs.map(ps => (psEmotionData[ps] && psEmotionData[ps][emotion]) || 0),
+        backgroundColor: colors[emotion]
+      }))
+    },
+    options: {
+      responsive: true,
+      scales: {
+        x: { stacked: true },
+        y: { stacked: true, beginAtZero: true }
+      }
+    }
+  });
+}
+
+// Duration Chart (Bar)
+const durationCtx = document.getElementById('durationChart');
+if (durationCtx) {
+  const programs = Object.keys(psDurationData);
+  const durations = programs.map(ps => Math.round(psDurationData[ps] / 60)); // Convert to minutes
+  
+  new Chart(durationCtx, {
+    type: 'bar',
+    data: {
+      labels: programs,
+      datasets: [{
+        label: 'Durasi (menit)',
+        data: durations,
+        backgroundColor: 'rgba(11, 46, 91, 0.8)'
+      }]
+    },
+    options: {
+      responsive: true,
+      scales: {
+        y: { beginAtZero: true }
+      }
+    }
+  });
+}
+
+// Search functionality
+document.getElementById('searchInput')?.addEventListener('input', function(e) {
+  const search = e.target.value.toLowerCase();
+  const rows = document.querySelectorAll('#recordsTable tbody tr');
+  rows.forEach(row => {
+    const text = row.getAttribute('data-search-text') || '';
+    row.style.display = text.includes(search) ? '' : 'none';
+  });
+});
+
+// Select all
+document.getElementById('checkAll')?.addEventListener('change', function(e) {
+  const checkboxes = document.querySelectorAll('.record-checkbox');
+  checkboxes.forEach(cb => cb.checked = e.target.checked);
+  updateSelectedCount();
+});
+
+document.querySelectorAll('.record-checkbox').forEach(cb => {
+  cb.addEventListener('change', updateSelectedCount);
+});
+
+function updateSelectedCount() {
+  const checked = document.querySelectorAll('.record-checkbox:checked');
+  const count = checked.length;
+  document.getElementById('selectedCount').textContent = count;
+  document.getElementById('summaryForm').style.display = count > 0 ? 'inline-block' : 'none';
+  
+  const inputsContainer = document.getElementById('selectedInputs');
+  inputsContainer.innerHTML = '';
+  checked.forEach(cb => {
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = 'selected_ids';
+    input.value = cb.value;
+    inputsContainer.appendChild(input);
+  });
+  
+  const allCheckboxes = document.querySelectorAll('.record-checkbox');
+  const allChecked = allCheckboxes.length > 0 && Array.from(allCheckboxes).every(cb => cb.checked);
+  document.getElementById('checkAll').checked = allChecked;
+}
+
+// Delete confirmation functions
+function confirmDelete(recordId, fileName) {
+  if (confirm(`Apakah Anda yakin ingin menghapus rekaman "${fileName}"?\n\nData yang akan dihapus:\n- File audio\n- Transkrip\n- Hasil analisis\n\nTindakan ini tidak dapat dibatalkan!`)) {
+    // Create form and submit
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = `/delete-record/${recordId}`;
+    document.body.appendChild(form);
+    form.submit();
+  }
+}
+
+function confirmDeleteAll() {
+  const recordCount = {{ total_audio }};
+  if (confirm(`Apakah Anda yakin ingin menghapus SEMUA ${recordCount} rekaman?\n\nSemua data termasuk file audio dan hasil analisis akan dihapus!\n\nTindakan ini tidak dapat dibatalkan!`)) {
+    // Create form and submit
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '{{ url_for("main.delete_all_records") }}';
+    document.body.appendChild(form);
+    form.submit();
+  }
+}
+
+function showSummaryLoading(event, form) {
+  const button = form.querySelector('button[type="submit"]');
+  if (button) {
+    button.disabled = true;
+    button.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Generating Summary...';
+  }
+  
+  // Show loading overlay
+  const loadingDiv = document.createElement('div');
+  loadingDiv.id = 'summaryLoading';
+  loadingDiv.className = 'alert alert-info mt-3';
+  loadingDiv.innerHTML = `
+    <div class="d-flex align-items-center">
+      <div class="spinner-border spinner-border-sm me-2"></div>
+      <strong>Menghasilkan ringkasan dengan AI...</strong>
+    </div>
+    <div class="mt-2 small">
+      Proses ini menggunakan LexRank summarization untuk menganalisis semua transkrip.<br>
+      Waktu proses: ~10-30 detik tergantung jumlah rekaman.<br>
+      Mohon tunggu, jangan refresh halaman.
+    </div>
+  `;
+  
+  form.parentElement.insertAdjacentElement('afterend', loadingDiv);
+  
+  return true;
+}
+</script>
+{% endblock %}

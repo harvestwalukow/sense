@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% set title = "Detail Rekaman | SENSE" %}
+{% block content %}
+<div class="container py-4">
+  <div class="page-header mb-4">
+    <div class="d-flex justify-content-between align-items-center">
+      <div>
+        <h2 class="fw-bold text-primary mb-2">Detail Rekaman</h2>
+        <p class="text-secondary">ID: {{ record.id }}</p>
+      </div>
+      <a href="{{ url_for('main.history') }}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-2"></i>Kembali
+      </a>
+    </div>
+  </div>
+
+  <div class="row g-4">
+    <!-- Info Cards -->
+    <div class="col-md-6 col-lg-3">
+      <div class="info-card">
+        <div class="info-icon bg-primary-subtle text-primary">
+          <i class="bi bi-file-earmark-music"></i>
+        </div>
+        <div class="info-content">
+          <p class="info-label">Nama File</p>
+          <p class="info-value">{{ record.audio_name }}</p>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-6 col-lg-3">
+      <div class="info-card">
+        <div class="info-icon bg-gold text-dark">
+          <i class="bi bi-clock"></i>
+        </div>
+        <div class="info-content">
+          <p class="info-label">Durasi</p>
+          <p class="info-value">{{ format_duration(record.duration_sec) }}</p>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-6 col-lg-3">
+      <div class="info-card">
+        <div class="info-icon bg-success-subtle text-success">
+          <i class="bi bi-check-circle"></i>
+        </div>
+        <div class="info-content">
+          <p class="info-label">Status</p>
+          <p class="info-value">
+            {% if record.has_gt %}
+              <span class="badge bg-success">GT Attached</span>
+            {% else %}
+              <span class="badge bg-secondary">Audio Only</span>
+            {% endif %}
+          </p>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-6 col-lg-3">
+      <div class="info-card">
+        <div class="info-icon bg-info-subtle text-info">
+          <i class="bi bi-calendar"></i>
+        </div>
+        <div class="info-content">
+          <p class="info-label">Tanggal</p>
+          <p class="info-value">{{ record.created_at[:10] }}</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Audio Player -->
+    <div class="col-12">
+      <div class="card-modern shadow-soft">
+        <h5 class="fw-bold text-primary mb-3">
+          <i class="bi bi-play-circle me-2"></i>Audio Player
+        </h5>
+        <audio controls class="w-100">
+          {% set audio_ext = record.audio_filename.split('.')[-1].lower() %}
+          {% if audio_ext == 'wav' %}
+            <source src="{{ url_for('main.media_upload', filename=record.audio_filename) }}" type="audio/wav">
+          {% elif audio_ext == 'mp3' %}
+            <source src="{{ url_for('main.media_upload', filename=record.audio_filename) }}" type="audio/mpeg">
+          {% elif audio_ext == 'm4a' %}
+            <source src="{{ url_for('main.media_upload', filename=record.audio_filename) }}" type="audio/mp4">
+          {% elif audio_ext == 'ogg' %}
+            <source src="{{ url_for('main.media_upload', filename=record.audio_filename) }}" type="audio/ogg">
+          {% else %}
+            <source src="{{ url_for('main.media_upload', filename=record.audio_filename) }}" type="audio/mpeg">
+          {% endif %}
+          Browser tidak mendukung audio tag. <a href="{{ url_for('main.media_upload', filename=record.audio_filename) }}" download>Download audio</a>
+        </audio>
+      </div>
+    </div>
+
+    <!-- Transcript -->
+    <div class="col-12">
+      <div class="card-modern shadow-soft">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h5 class="fw-bold text-primary mb-0">
+            <i class="bi bi-file-text me-2"></i>Transcript
+          </h5>
+          {% if record.has_gt %}
+            <span class="badge bg-success">GT Transcript</span>
+          {% endif %}
+        </div>
+        <div class="transcript-box">
+          <p class="mb-0">{{ record.transcript }}</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Emotion Distribution -->
+    <div class="col-12">
+      <div class="card-modern shadow-soft">
+        <h5 class="fw-bold text-primary mb-3">
+          <i class="bi bi-pie-chart me-2"></i>Distribusi Emosi
+        </h5>
+        <div class="row g-3">
+          {% for emotion, value in record.emotion_distribution.items() %}
+          <div class="col-md-6 col-lg-3">
+            <div class="emotion-bar">
+              <div class="d-flex justify-content-between mb-2">
+                <span class="fw-semibold">{{ emotion }}</span>
+                <span class="text-secondary">{{ value }}%</span>
+              </div>
+              <div class="progress" style="height: 8px;">
+                <div class="progress-bar bg-primary" role="progressbar" style="width: {{ value }}%"></div>
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

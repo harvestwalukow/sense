@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+{% set title = "History | SENSE" %}
+{% block content %}
+<div class="container py-4">
+  <div class="page-header mb-4">
+    <div class="d-flex justify-content-between align-items-center">
+      <div>
+        <h2 class="fw-bold text-primary mb-2">History Rekaman</h2>
+        <p class="text-secondary">
+          Total: <strong>{{ records|length }}</strong> rekaman | 
+          Pilih rekaman untuk generate summary batch
+        </p>
+      </div>
+      <a href="{{ url_for('main.ingest') }}" class="btn btn-primary">
+        <i class="bi bi-plus-circle me-2"></i>Input Baru
+      </a>
+    </div>
+  </div>
+
+  {% if not records %}
+    <!-- Empty State -->
+    <div class="empty-state text-center py-5">
+      <div class="empty-icon mb-4">
+        <i class="bi bi-inbox"></i>
+      </div>
+      <h4 class="fw-bold text-secondary mb-2">Belum ada rekaman</h4>
+      <p class="text-secondary mb-4">Mulai dengan mengunggah rekaman audio pertama Anda</p>
+      <a href="{{ url_for('main.ingest') }}" class="btn btn-primary btn-lg">
+        <i class="bi bi-cloud-upload me-2"></i>Input Rekaman Pertama
+      </a>
+    </div>
+  {% else %}
+    <!-- Search & Actions -->
+    <div class="card-modern shadow-soft mb-4">
+      <div class="row g-3 align-items-end">
+        <div class="col-md-6">
+          <label class="form-label fw-semibold">Cari Rekaman</label>
+          <input type="text" class="form-control" id="searchInput" placeholder="Cari berdasarkan nama file...">
+        </div>
+        <div class="col-md-6">
+          <div class="d-flex flex-wrap gap-2 align-items-end">
+            <button type="button" class="btn btn-outline-primary" id="selectAllBtn">
+              <i class="bi bi-check-square me-2"></i>Select All
+            </button>
+            <button type="button" class="btn btn-outline-secondary" id="deselectAllBtn" style="display: none;">
+              <i class="bi bi-x-square me-2"></i>Deselect All
+            </button>
+            <form method="post" action="{{ url_for('main.summary') }}" id="summaryForm" style="display: none;">
+              <div id="selectedInputs"></div>
+              <button type="submit" class="btn btn-gold" id="generateBtn">
+                <i class="bi bi-file-text me-2"></i>Generate Summary (<span id="selectedCount">0</span>)
+              </button>
+            </form>
+          </div>
+          <small class="text-secondary mt-1 d-block">Pilih minimal 1 file untuk generate summary</small>
+        </div>
+      </div>
+    </div>
+
+    <!-- Records Table -->
+    <div class="card-modern shadow-soft">
+      <div class="table-responsive">
+        <table class="table table-hover mb-0" id="recordsTable">
+          <thead class="table-light">
+            <tr>
+              <th width="50">
+                <input type="checkbox" class="form-check-input" id="checkAll">
+              </th>
+              <th>Nama File</th>
+              <th>Durasi</th>
+              <th>Status</th>
+              <th>Tanggal</th>
+              <th width="120">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for record in records %}
+            <tr data-record-id="{{ record.id }}" data-search-text="{{ record.audio_name|lower }}">
+              <td>
+                <input type="checkbox" class="form-check-input record-checkbox" name="selected_ids" value="{{ record.id }}">
+              </td>
+              <td>
+                <div class="fw-semibold">
+                  <i class="bi bi-file-earmark-music me-1 text-primary"></i>{{ record.audio_name }}
+                </div>
+                <small class="text-secondary">ID: {{ record.id[:8] }}...</small>
+              </td>
+              <td>
+                <span class="fw-semibold">{{ format_duration(record.duration_sec) }}</span>
+                {% if record.duration_sec == 0 %}
+                  <small class="text-warning d-block">Durasi tidak terdeteksi</small>
+                {% endif %}
+              </td>
+              <td>
+                {% if record.has_gt %}
+                  <span class="badge bg-success">
+                    <i class="bi bi-check-circle me-1"></i>GT Attached
+                  </span>
+                {% else %}
+                  <span class="badge bg-secondary">Audio Only</span>
+                {% endif %}
+              </td>
+              <td>
+                <small class="text-secondary">{{ record.created_at[:10] }}</small>
+              </td>
+              <td>
+                <a href="{{ url_for('main.detail', record_id=record.id) }}" class="btn btn-sm btn-primary">
+                  <i class="bi bi-eye me-1"></i>Lihat Detail
+                </a>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% endif %}
+</div>
+
+<script>
+// Search functionality
+document.getElementById('searchInput')?.addEventListener('input', function(e) {
+  const search = e.target.value.toLowerCase();
+  const rows = document.querySelectorAll('#recordsTable tbody tr');
+  rows.forEach(row => {
+    const text = row.getAttribute('data-search-text') || '';
+    row.style.display = text.includes(search) ? '' : 'none';
+  });
+});
+
+// Select all button
+document.getElementById('selectAllBtn')?.addEventListener('click', function() {
+  const checkboxes = document.querySelectorAll('.record-checkbox');
+  const checkAll = document.getElementById('checkAll');
+  checkboxes.forEach(cb => cb.checked = true);
+  if (checkAll) checkAll.checked = true;
+  updateSelectedCount();
+});
+
+// Deselect all button
+document.getElementById('deselectAllBtn')?.addEventListener('click', function() {
+  const checkboxes = document.querySelectorAll('.record-checkbox');
+  const checkAll = document.getElementById('checkAll');
+  checkboxes.forEach(cb => cb.checked = false);
+  if (checkAll) checkAll.checked = false;
+  updateSelectedCount();
+});
+
+// Check all checkbox
+document.getElementById('checkAll')?.addEventListener('change', function(e) {
+  const checkboxes = document.querySelectorAll('.record-checkbox');
+  checkboxes.forEach(cb => cb.checked = e.target.checked);
+  updateSelectedCount();
+});
+
+// Individual checkbox
+document.querySelectorAll('.record-checkbox').forEach(cb => {
+  cb.addEventListener('change', updateSelectedCount);
+});
+
+function updateSelectedCount() {
+  const checked = document.querySelectorAll('.record-checkbox:checked');
+  const count = checked.length;
+  const selectedCountEl = document.getElementById('selectedCount');
+  const generateBtn = document.getElementById('generateBtn');
+  const summaryForm = document.getElementById('summaryForm');
+  const selectAllBtn = document.getElementById('selectAllBtn');
+  const deselectAllBtn = document.getElementById('deselectAllBtn');
+  
+  if (selectedCountEl) selectedCountEl.textContent = count;
+  
+  if (count > 0) {
+    if (generateBtn) generateBtn.disabled = false;
+    if (summaryForm) summaryForm.style.display = 'inline-block';
+    if (selectAllBtn) selectAllBtn.style.display = 'none';
+    if (deselectAllBtn) deselectAllBtn.style.display = 'inline-block';
+  } else {
+    if (generateBtn) generateBtn.disabled = true;
+    if (summaryForm) summaryForm.style.display = 'none';
+    if (selectAllBtn) selectAllBtn.style.display = 'inline-block';
+    if (deselectAllBtn) deselectAllBtn.style.display = 'none';
+  }
+  
+  // Update hidden inputs for form submission
+  const inputsContainer = document.getElementById('selectedInputs');
+  if (inputsContainer) {
+    inputsContainer.innerHTML = '';
+    checked.forEach(cb => {
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = 'selected_ids';
+      input.value = cb.value;
+      inputsContainer.appendChild(input);
+    });
+  }
+  
+  // Update checkAll state
+  const allCheckboxes = document.querySelectorAll('.record-checkbox');
+  const allChecked = allCheckboxes.length > 0 && Array.from(allCheckboxes).every(cb => cb.checked);
+  const checkAll = document.getElementById('checkAll');
+  if (checkAll) checkAll.checked = allChecked;
+}
+
+// Initialize on page load
+updateSelectedCount();
+</script>
+{% endblock %}
+

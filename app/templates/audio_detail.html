@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% set title = "Detail Audio | SENSE" %}
+{% block content %}
+<div class="container py-4">
+  <div class="page-header mb-4">
+    <div class="d-flex justify-content-between align-items-center">
+      <div>
+        <h2 class="fw-bold text-primary mb-2">Detail Audio</h2>
+        <p class="text-secondary">Kode: {{ record.id }}</p>
+      </div>
+      <a href="{{ url_for('main.dashboard') }}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-2"></i>Kembali ke Dashboard
+      </a>
+    </div>
+  </div>
+
+  <div class="row g-4">
+    <!-- Header Card Partisipan -->
+    <div class="col-12">
+      <div class="card-modern shadow-soft">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <h5 class="fw-bold text-primary mb-1">Partisipan: {{ record.get('label_partisipan', 'N/A') }}</h5>
+            <p class="text-secondary small mb-0">Program Studi: {{ record.get('program_studi', 'N/A') }}</p>
+          </div>
+          <span class="badge bg-primary" style="font-size: 1rem; padding: 0.5rem 1rem;">
+            Emosi Dominan: {{ record.get('dominant_emotion', 'Neutral') }}
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section Kiri: Audio Player + Transkrip -->
+    <div class="col-lg-8">
+      <!-- Audio Player -->
+      {% if record.get('audio_filename') %}
+      <div class="card-modern shadow-soft mb-4">
+        <h5 class="fw-bold text-primary mb-3">
+          <i class="bi bi-play-circle me-2"></i>Audio Player
+        </h5>
+        <audio controls class="w-100">
+          {% set audio_ext = record.audio_filename.split('.')[-1].lower() %}
+          {% if audio_ext == 'wav' %}
+            <source src="{{ url_for('main.media_upload', filename=record.audio_filename) }}" type="audio/wav">
+          {% elif audio_ext == 'mp3' %}
+            <source src="{{ url_for('main.media_upload', filename=record.audio_filename) }}" type="audio/mpeg">
+          {% elif audio_ext == 'm4a' %}
+            <source src="{{ url_for('main.media_upload', filename=record.audio_filename) }}" type="audio/mp4">
+          {% else %}
+            <source src="{{ url_for('main.media_upload', filename=record.audio_filename) }}" type="audio/mpeg">
+          {% endif %}
+          Browser tidak mendukung audio tag.
+        </audio>
+        <div class="mt-2 text-secondary small">
+          <i class="bi bi-clock me-1"></i>Durasi: {{ format_duration(record.duration_sec) }}
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- Transkrip Lengkap -->
+      <div class="card-modern shadow-soft">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h5 class="fw-bold text-primary mb-0">
+            <i class="bi bi-file-text me-2"></i>Transkrip Lengkap
+          </h5>
+          {% if record.has_gt %}
+            <span class="badge bg-success">GT Attached</span>
+          {% endif %}
+        </div>
+        <div class="transcript-box">
+          <p class="mb-0">{{ record.transcript }}</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section Kanan: Deteksi Emosi -->
+    <div class="col-lg-4">
+      <div class="card-modern shadow-soft">
+        <h5 class="fw-bold text-primary mb-3">
+          <i class="bi bi-pie-chart me-2"></i>Deteksi Emosi
+        </h5>
+        
+        <!-- Prediksi Emosi + Confidence -->
+        <div class="mb-4">
+          <div class="text-center mb-3">
+            <div class="dominant-emotion-badge">
+              <h4 class="mb-1">{{ record.get('dominant_emotion', 'Neutral') }}</h4>
+              <small class="text-secondary">Emosi Dominan</small>
+            </div>
+          </div>
+        </div>
+
+        <!-- Probabilitas Bar -->
+        <div class="emotion-probability">
+          {% for emotion, value in record.emotion_distribution.items() %}
+          <div class="emotion-item mb-3">
+            <div class="d-flex justify-content-between mb-2">
+              <span class="fw-semibold">{{ emotion }}</span>
+              <span class="text-secondary">{{ value }}%</span>
+            </div>
+            <div class="progress" style="height: 10px;">
+              <div class="progress-bar bg-primary" role="progressbar" style="width: {{ value }}%"></div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+

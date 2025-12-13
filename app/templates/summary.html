@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% set title = "Summary Batch | SENSE" %}
+{% block content %}
+<div class="container py-4">
+  <div class="page-header mb-4">
+    <div class="d-flex justify-content-between align-items-center">
+      <div>
+        <h2 class="fw-bold text-primary mb-2">Summary Gabungan</h2>
+        <p class="text-secondary">Summary Gabungan dari <strong>{{ records|length }}</strong> Audio</p>
+      </div>
+      <div class="d-flex gap-2">
+        <a href="{{ url_for('main.export_pdf', batch=batch_id) }}" class="btn btn-outline-danger">
+          <i class="bi bi-file-pdf me-2"></i>Download PDF
+        </a>
+        <a href="{{ url_for('main.export_csv', batch=batch_id) }}" class="btn btn-outline-success">
+          <i class="bi bi-file-earmark-spreadsheet me-2"></i>Download CSV
+        </a>
+        <a href="{{ url_for('main.dashboard') }}" class="btn btn-outline-secondary">
+          <i class="bi bi-arrow-left me-2"></i>Kembali ke Dashboard
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Selected Files Info -->
+  <div class="card-modern shadow-soft mb-4">
+    <div class="d-flex align-items-start gap-3">
+      <div class="icon-circle bg-primary text-white flex-shrink-0">
+        <i class="bi bi-file-earmark-text"></i>
+      </div>
+      <div class="flex-grow-1">
+        <h6 class="fw-bold mb-2">Rekaman yang Dipilih</h6>
+        <p class="text-secondary small mb-2">
+          <strong>Selected:</strong> {{ records|length }} files
+        </p>
+        <div class="selected-files-list">
+          {% for record in records %}
+          <div class="d-flex align-items-center gap-2 mb-1">
+            <i class="bi bi-file-earmark-music text-primary"></i>
+            <span class="small">{{ record.audio_name }}</span>
+            <span class="badge bg-secondary small">{{ record.get('label_partisipan', 'N/A') }}</span>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4 Summary Cards -->
+  <div class="row g-4 mb-4">
+    <div class="col-md-6">
+      <div class="summary-card h-100">
+        <div class="summary-icon bg-danger-subtle text-danger">
+          <i class="bi bi-exclamation-triangle"></i>
+        </div>
+        <h5 class="summary-title">1. Tantangan selama S2</h5>
+        <ul class="summary-list">
+          {% for item in summaries.tantangan %}
+          <li>{{ item }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="summary-card h-100">
+        <div class="summary-icon bg-success-subtle text-success">
+          <i class="bi bi-lightbulb"></i>
+        </div>
+        <h5 class="summary-title">2. Solusi/Coping Strategy</h5>
+        <ul class="summary-list">
+          {% for item in summaries.solusi %}
+          <li>{{ item }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="summary-card h-100">
+        <div class="summary-icon bg-info-subtle text-info">
+          <i class="bi bi-star"></i>
+        </div>
+        <h5 class="summary-title">3. Harapan</h5>
+        <ul class="summary-list">
+          {% for item in summaries.harapan %}
+          <li>{{ item }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="summary-card h-100">
+        <div class="summary-icon bg-warning-subtle text-warning">
+          <i class="bi bi-person-check"></i>
+        </div>
+        <h5 class="summary-title">4. Preferensi Pembimbing Tesis</h5>
+        <ul class="summary-list">
+          {% for item in summaries.preferensi %}
+          <li>{{ item }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Action -->
+  <div class="text-center">
+    <a href="{{ url_for('main.dashboard') }}" class="btn btn-primary btn-lg">
+      <i class="bi bi-arrow-left me-2"></i>Kembali ke Dashboard
+    </a>
+  </div>
+</div>
+{% endblock %}

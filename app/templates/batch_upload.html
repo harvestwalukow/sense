@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+
+{% block title %}Batch Upload - SENSE{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="max-w-4xl mx-auto">
+        <!-- Header -->
+        <div class="mb-8">
+            <h1 class="text-3xl font-bold text-gray-800 mb-2">Batch Audio Analysis</h1>
+            <p class="text-gray-600">Upload multiple audio files in a ZIP archive for batch processing</p>
+        </div>
+
+        <!-- Instructions Card -->
+        <div class="bg-blue-50 border-l-4 border-blue-500 p-4 mb-6">
+            <div class="flex">
+                <div class="flex-shrink-0">
+                    <svg class="h-5 w-5 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+                    </svg>
+                </div>
+                <div class="ml-3">
+                    <h3 class="text-sm font-medium text-blue-800">Instructions</h3>
+                    <div class="mt-2 text-sm text-blue-700">
+                        <ul class="list-disc list-inside space-y-1">
+                            <li>Prepare a ZIP file containing your audio files (.mp3, .wav, .m4a, .aac, .flac)</li>
+                            <li>Optionally include ground truth files (.docx) with "GT_" prefix or in a "ground_truth" folder</li>
+                            <li>Processing may take several minutes depending on the number of files</li>
+                            <li>All files will be transcribed, analyzed for emotions, and summarized</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Upload Form -->
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <form method="POST" enctype="multipart/form-data" id="batchForm">
+                <div class="space-y-6">
+                    <!-- File Upload -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            Select ZIP File
+                        </label>
+                        <div class="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-lg hover:border-blue-400 transition-colors">
+                            <div class="space-y-1 text-center">
+                                <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48">
+                                    <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                                </svg>
+                                <div class="flex text-sm text-gray-600">
+                                    <label for="batch_file" class="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-blue-500">
+                                        <span>Upload a ZIP file</span>
+                                        <input id="batch_file" name="batch_file" type="file" class="sr-only" accept=".zip" required onchange="updateFileName(this)">
+                                    </label>
+                                    <p class="pl-1">or drag and drop</p>
+                                </div>
+                                <p class="text-xs text-gray-500">ZIP files only (max 1GB)</p>
+                                <p id="fileName" class="text-sm text-blue-600 font-medium mt-2"></p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Submit Button -->
+                    <div class="flex items-center justify-between pt-4">
+                        <a href="{{ url_for('main.dashboard') }}" class="text-gray-600 hover:text-gray-800">
+                            ← Back to Dashboard
+                        </a>
+                        <button type="submit" class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors" id="submitBtn">
+                            <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white hidden" id="spinner" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            <span id="btnText">Start Batch Processing</span>
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <!-- Processing Info -->
+        <div class="mt-6 bg-gray-50 rounded-lg p-4">
+            <h3 class="text-sm font-medium text-gray-700 mb-2">What happens during batch processing?</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600">
+                <div class="flex items-start">
+                    <span class="text-green-500 mr-2">✓</span>
+                    <span>Audio transcription using Whisper AI</span>
+                </div>
+                <div class="flex items-start">
+                    <span class="text-green-500 mr-2">✓</span>
+                    <span>Emotion detection (Happy, Sad, Angry, Neutral)</span>
+                </div>
+                <div class="flex items-start">
+                    <span class="text-green-500 mr-2">✓</span>
+                    <span>Topic segmentation (Tantangan, Strategi, Harapan, Preferensi)</span>
+                </div>
+                <div class="flex items-start">
+                    <span class="text-green-500 mr-2">✓</span>
+                    <span>Automatic summarization of all transcripts</span>
+                </div>
+                <div class="flex items-start">
+                    <span class="text-green-500 mr-2">✓</span>
+                    <span>WER/CER evaluation (if ground truth provided)</span>
+                </div>
+                <div class="flex items-start">
+                    <span class="text-green-500 mr-2">✓</span>
+                    <span>Global emotion and topic aggregation</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function updateFileName(input) {
+    const fileName = input.files[0]?.name || '';
+    document.getElementById('fileName').textContent = fileName ? `Selected: ${fileName}` : '';
+}
+
+document.getElementById('batchForm').addEventListener('submit', function() {
+    const btn = document.getElementById('submitBtn');
+    const btnText = document.getElementById('btnText');
+    const spinner = document.getElementById('spinner');
+    
+    btn.disabled = true;
+    btn.classList.add('opacity-75', 'cursor-not-allowed');
+    spinner.classList.remove('hidden');
+    btnText.textContent = 'Processing... This may take several minutes';
+});
+</script>
+{% endblock %}
+
