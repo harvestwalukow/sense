@@ -199,3 +199,4 @@ def get_lexrank_summarizer() -> LexRankTextSummarizer:
         _summarizer_instance = LexRankTextSummarizer()
     return _summarizer_instance
 
+
