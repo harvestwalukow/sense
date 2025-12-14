@@ -150,7 +150,6 @@
           <form method="post" action="{{ url_for('main.summary') }}" id="summaryForm" onsubmit="showSummaryLoading(event, this)">
             <div id="selectedInputs"></div>
             <input type="hidden" name="generate_all" value="true" id="generateAllInput">
-            <input type="hidden" name="use_ollama" value="true">
             <button type="submit" class="btn btn-primary" id="summarizeBtn">
               <i class="bi bi-stars me-2"></i>Summarize
             </button>
@@ -442,11 +441,11 @@ function showSummaryLoading(event, form) {
   loadingDiv.innerHTML = `
     <div class="d-flex align-items-center">
       <div class="spinner-border spinner-border-sm me-2"></div>
-      <strong>Menghasilkan ringkasan dengan Ollama AI...</strong>
+      <strong>Menghasilkan ringkasan dengan LexRank...</strong>
     </div>
     <div class="mt-2 small">
-      Proses ini menggunakan Ollama GPT-OSS model untuk menganalisis semua transkrip.<br>
-      Waktu proses: ~30-60 detik tergantung jumlah rekaman dan kecepatan API.<br>
+      Proses ini menggunakan LexRank algorithm untuk menganalisis semua transkrip.<br>
+      Waktu proses: ~5-15 detik tergantung jumlah rekaman.<br>
       Mohon tunggu, jangan refresh halaman.
     </div>
   `;

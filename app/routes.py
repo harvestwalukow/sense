@@ -49,7 +49,7 @@ from .audio_processor import get_processor
 from .evaluation import evaluate_transcript, get_clean_text_from_docx
 from .batch_processor import extract_and_discover_files, batch_process_audio_files
 from .progress_tracker import get_tracker, reset_tracker
-from .ollama_summarizer import get_ollama_summarizer
+from .lexrank_summarizer import get_lexrank_summarizer
 
 
 bp = Blueprint("main", __name__)
@@ -457,11 +457,11 @@ def ingest():
             emotion_data = analysis_result["analisis_emosi"]
             summary = analysis_result["ringkasan"]
             
-            # Map emotion labels to readable names
+            # Map emotion labels to readable names (MERaLiON-SER-v1 labels)
             emotion_label_map = {
-                'neu': 'Neutral',
-                'hap': 'Happy',
-                'ang': 'Angry',
+                'neutral': 'Neutral',
+                'happy': 'Happy',
+                'angry': 'Angry',
                 'sad': 'Sad'
             }
             
@@ -490,6 +490,7 @@ def ingest():
             segments = [("FULL TRANSKRIP", analyzed_transcript)]
             summary = "Summary unavailable due to processing error."
             wer_cer_metrics = None
+            analysis_result = None  # Initialize to avoid UnboundLocalError
         
         record_data = {
             "id": record_id,
@@ -528,7 +529,8 @@ def ingest():
                 # Add missing final messages from analysis
                 tracker._logs.append("✓ Ringkasan berhasil dibuat")
                 tracker._logs.append(f"Total waktu proses: kompleks")
-                tracker._logs.append(f"Hasil: {analysis_result.get('word_count', 0)} kata berhasil ditranskripsi")
+                word_count = analysis_result.get('word_count', 0) if analysis_result else len(analyzed_transcript.split())
+                tracker._logs.append(f"Hasil: {word_count} kata berhasil ditranskripsi")
             
             tracker._logs.append("")
             tracker._logs.append("="*60)
@@ -616,9 +618,9 @@ def audio_detail(record_id: str):
     return render_template("audio_detail.html", record=record)
 
 
-@bp.route("/audio/<record_id>/generate-ollama-summary", methods=["POST"])
-def generate_ollama_summary(record_id: str):
-    """Generate summary untuk single audio menggunakan Ollama"""
+@bp.route("/audio/<record_id>/generate-lexrank-summary", methods=["POST"])
+def generate_lexrank_summary(record_id: str):
+    """Generate summary untuk single audio menggunakan LexRank"""
     try:
         record = _load_record(record_id)
         if not record:
@@ -629,24 +631,14 @@ def generate_ollama_summary(record_id: str):
         if not transcript:
             return jsonify({"success": False, "error": "Transkrip tidak tersedia"}), 400
         
-        # Get Ollama API key from environment or config
-        import os
-        api_key = os.environ.get('OLLAMA_API_KEY', '')
-        
-        if not api_key:
-            return jsonify({
-                "success": False, 
-                "error": "Ollama API key tidak dikonfigurasi. Set OLLAMA_API_KEY environment variable."
-            }), 400
-        
-        # Initialize Ollama summarizer
-        summarizer = get_ollama_summarizer(api_key=api_key)
+        # Initialize LexRank summarizer
+        summarizer = get_lexrank_summarizer()
         
         # Generate summary
-        result = summarizer.generate_summary_4_points(transcript, stream=False)
+        result = summarizer.generate_summary_4_points(transcript)
         
         # Save summary to record
-        record['ollama_summary'] = result
+        record['lexrank_summary'] = result
         _save_record(record_id, record)
         
         return jsonify({
@@ -655,63 +647,11 @@ def generate_ollama_summary(record_id: str):
         })
     
     except Exception as e:
-        current_app.logger.error(f"Error generating Ollama summary: {e}", exc_info=True)
+        current_app.logger.error(f"Error generating LexRank summary: {e}", exc_info=True)
         return jsonify({
             "success": False,
             "error": str(e)
         }), 500
-
-
-@bp.route("/audio/<record_id>/generate-ollama-summary-stream")
-def generate_ollama_summary_stream(record_id: str):
-    """Generate summary untuk single audio menggunakan Ollama dengan streaming"""
-    from flask import Response, stream_with_context
-    import json
-    
-    def generate():
-        try:
-            record = _load_record(record_id)
-            if not record:
-                yield f"data: {json.dumps({'error': 'Rekaman tidak ditemukan'})}\n\n"
-                return
-            
-            # Get transcript
-            transcript = record.get("transcript", "")
-            if not transcript:
-                yield f"data: {json.dumps({'error': 'Transkrip tidak tersedia'})}\n\n"
-                return
-            
-            # Get Ollama API key
-            import os
-            api_key = os.environ.get('OLLAMA_API_KEY', '')
-            
-            if not api_key:
-                yield f"data: {json.dumps({'error': 'Ollama API key tidak dikonfigurasi'})}\n\n"
-                return
-            
-            # Initialize Ollama summarizer
-            summarizer = get_ollama_summarizer(api_key=api_key)
-            
-            # Stream the summary
-            full_text = ""
-            for chunk in summarizer.generate_summary_4_points(transcript, stream=True):
-                if isinstance(chunk, str):
-                    # This is a text chunk
-                    full_text += chunk
-                    yield f"data: {json.dumps({'chunk': chunk})}\n\n"
-                elif isinstance(chunk, dict):
-                    # This is the final parsed result
-                    # Save to record
-                    record['ollama_summary'] = chunk
-                    _save_record(record_id, record)
-                    
-                    yield f"data: {json.dumps({'done': True, 'summary': chunk})}\n\n"
-        
-        except Exception as e:
-            current_app.logger.error(f"Error in streaming: {e}", exc_info=True)
-            yield f"data: {json.dumps({'error': str(e)})}\n\n"
-    
-    return Response(stream_with_context(generate()), mimetype='text/event-stream')
 
 
 @bp.route("/summary", methods=["GET", "POST"])
@@ -749,31 +689,19 @@ def summary():
         flash("Tidak ada rekaman yang valid.", "danger")
         return redirect(url_for("main.dashboard"))
     
-    # Check if user requested Ollama summary
-    use_ollama = request.form.get("use_ollama") == "true"
-    
-    if use_ollama:
-        # Generate combined summary using Ollama
-        try:
-            combined_summary_4p = _generate_ollama_batch_summary(selected_records)
-        except Exception as e:
-            current_app.logger.error(f"Error generating Ollama summary: {e}", exc_info=True)
-            flash(f"⚠️ Error generating Ollama summary: {str(e)}. Using LexRank instead.", "warning")
-            combined_summary_4p = _generate_combined_summary(selected_records)
-    else:
-        # Generate combined summary using real summarization (LexRank)
-        try:
-            combined_summary_4p = _generate_combined_summary(selected_records)
-        except Exception as e:
-            current_app.logger.error(f"Error generating summary: {e}", exc_info=True)
-            flash(f"⚠️ Error generating summary: {str(e)}", "warning")
-            # Fallback to simple summary
-            combined_summary_4p = {
-                "tantangan": ["Error generating summary"],
-                "solusi": ["Error generating summary"],
-                "harapan": ["Error generating summary"],
-                "preferensi": ["Error generating summary"],
-            }
+    # Generate combined summary using LexRank
+    try:
+        combined_summary_4p = _generate_combined_summary(selected_records)
+    except Exception as e:
+        current_app.logger.error(f"Error generating summary: {e}", exc_info=True)
+        flash(f"⚠️ Error generating summary: {str(e)}", "warning")
+        # Fallback to simple summary
+        combined_summary_4p = {
+            "tantangan": ["Error generating summary"],
+            "solusi": ["Error generating summary"],
+            "harapan": ["Error generating summary"],
+            "preferensi": ["Error generating summary"],
+        }
     
     batch_id = uuid.uuid4().hex[:12]
     batch_data = {
@@ -782,65 +710,11 @@ def summary():
         "selected_count": len(selected_records),
         "combined_summary_4p": combined_summary_4p,
         "created_at": datetime.now().isoformat(),
-        "summarizer": "ollama" if use_ollama else "lexrank"
+        "summarizer": "lexrank"
     }
     _save_batch(batch_id, batch_data)
     
-    return render_template("summary.html", records=selected_records, summaries=combined_summary_4p, batch_id=batch_id, summarizer="ollama" if use_ollama else "lexrank")
-
-
-def _generate_ollama_batch_summary(selected_records: List[Dict]) -> Dict[str, List[str]]:
-    """Generate batch summary menggunakan Ollama"""
-    print("\n" + "="*60)
-    print("GENERATING BATCH SUMMARY WITH OLLAMA")
-    print("="*60)
-    print(f"Processing {len(selected_records)} records...")
-    
-    # Get API key
-    import os
-    api_key = os.environ.get('OLLAMA_API_KEY', '')
-    
-    if not api_key:
-        raise ValueError("Ollama API key tidak dikonfigurasi. Set OLLAMA_API_KEY environment variable.")
-    
-    # Collect all transcripts
-    transcripts = []
-    for record in selected_records:
-        transcript = record.get("transcript", "")
-        if transcript:
-            transcripts.append(transcript)
-            print(f"  - {record.get('audio_name', 'Unknown')}: {len(transcript.split())} words")
-    
-    if not transcripts:
-        raise ValueError("Tidak ada transkrip yang tersedia")
-    
-    # Initialize Ollama summarizer
-    summarizer = get_ollama_summarizer(api_key=api_key)
-    
-    # Generate batch summary
-    print("\nGenerating summary with Ollama AI...")
-    result = summarizer.generate_batch_summary(transcripts)
-    
-    print("\n" + "="*60)
-    print("OLLAMA BATCH SUMMARY COMPLETE")
-    print("="*60)
-    
-    # Debug: Print what we got
-    print("\n--- DEBUG: Hasil dari Ollama ---")
-    print(f"Full summary length: {len(result.get('full_summary', ''))}")
-    print(f"Tantangan: {result['tantangan'][:100]}..." if len(result['tantangan']) > 100 else f"Tantangan: {result['tantangan']}")
-    print(f"Solusi: {result['solusi'][:100]}..." if len(result['solusi']) > 100 else f"Solusi: {result['solusi']}")
-    print(f"Harapan: {result['harapan'][:100]}..." if len(result['harapan']) > 100 else f"Harapan: {result['harapan']}")
-    print(f"Preferensi: {result['preferensi'][:100]}..." if len(result['preferensi']) > 100 else f"Preferensi: {result['preferensi']}")
-    print("--- END DEBUG ---\n")
-    
-    # Convert to expected format (list of strings per category)
-    return {
-        "tantangan": [result['tantangan']] if result['tantangan'] else ["Tidak ada data tantangan"],
-        "solusi": [result['solusi']] if result['solusi'] else ["Tidak ada data solusi"],
-        "harapan": [result['harapan']] if result['harapan'] else ["Tidak ada data harapan"],
-        "preferensi": [result['preferensi']] if result['preferensi'] else ["Tidak ada data preferensi"],
-    }
+    return render_template("summary.html", records=selected_records, summaries=combined_summary_4p, batch_id=batch_id, summarizer="lexrank")
 
 
 def _generate_combined_summary(selected_records: List[Dict]) -> Dict[str, List[str]]:
@@ -1230,8 +1104,8 @@ def batch_upload():
             if trans_data and emotion_data:
                 record_id = uuid.uuid4().hex[:12]
                 
-                # Map emotion labels
-                emotion_label_map = {'neu': 'Neutral', 'hap': 'Happy', 'ang': 'Angry', 'sad': 'Sad'}
+                # Map emotion labels (MERaLiON-SER-v1 labels)
+                emotion_label_map = {'neutral': 'Neutral', 'happy': 'Happy', 'angry': 'Angry', 'sad': 'Sad'}
                 emotion_dist = {}
                 for emotion, percentage in emotion_data['percentages'].items():
                     readable_name = emotion_label_map.get(emotion, emotion.capitalize())

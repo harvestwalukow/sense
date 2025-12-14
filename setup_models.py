@@ -12,9 +12,9 @@ def setup_models():
     print("=" * 60)
     print("\nThis script will download and initialize:")
     print("  1. Whisper Large-v3 (~2.9GB)")
-    print("  2. Wav2Vec2 Emotion Model (~360MB)")
+    print("  2. MERaLiON-SER-v1 Emotion Model (~1.5GB)")
     print("  3. NLTK Data (punkt, punkt_tab)")
-    print("\nTotal download size: ~3.3GB")
+    print("\nTotal download size: ~4.5GB")
     print("This may take 10-30 minutes depending on internet speed.")
     print("=" * 60)
     
@@ -62,16 +62,16 @@ def setup_models():
             print(f"✗ Error: {e2}")
             return
     
-    # Step 3: Load Wav2Vec2 model
-    print("\n[3/3] Downloading Wav2Vec2 Emotion Model...")
+    # Step 3: Load MERaLiON-SER model
+    print("\n[3/3] Downloading MERaLiON-SER-v1 Emotion Model...")
     try:
-        from transformers import AutoFeatureExtractor, Wav2Vec2ForSequenceClassification
-        emotion_model_name = "superb/wav2vec2-base-superb-er"
-        emotion_extractor = AutoFeatureExtractor.from_pretrained(emotion_model_name)
-        emotion_model = Wav2Vec2ForSequenceClassification.from_pretrained(emotion_model_name)
-        print("✓ Wav2Vec2 Emotion Model downloaded and loaded")
+        from transformers import WhisperFeatureExtractor, AutoModelForAudioClassification
+        emotion_model_name = "MERaLiON/MERaLiON-SER-v1"
+        emotion_extractor = WhisperFeatureExtractor.from_pretrained(emotion_model_name)
+        emotion_model = AutoModelForAudioClassification.from_pretrained(emotion_model_name)
+        print("✓ MERaLiON-SER-v1 Emotion Model downloaded and loaded")
     except Exception as e:
-        print(f"✗ Error loading Wav2Vec2: {e}")
+        print(f"✗ Error loading MERaLiON-SER-v1: {e}")
         return
     
     # Verify everything works
@@ -96,5 +96,6 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"\n\nUnexpected error: {e}")
         sys.exit(1)
+
 
 

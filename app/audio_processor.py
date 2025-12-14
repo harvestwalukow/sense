@@ -15,9 +15,10 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional
 
+import librosa
 from pydub import AudioSegment
 from scipy.ndimage import uniform_filter1d
-from transformers import AutoFeatureExtractor, Wav2Vec2ForSequenceClassification
+from transformers import WhisperFeatureExtractor, AutoModelForAudioClassification
 from sumy.parsers.plaintext import PlaintextParser
 from sumy.nlp.tokenizers import Tokenizer
 from sumy.summarizers.lex_rank import LexRankSummarizer
@@ -81,17 +82,32 @@ class AudioProcessor:
             self.model_whisper = whisper.load_model("base", device=self.device)
             log_progress("✓ Model Whisper base berhasil dimuat")
         
-        # Load Emotion model
-        log_progress("Memuat model analisis emosi...")
+        # Load MERaLiON-SER Emotion model
+        log_progress("Memuat model analisis emosi MERaLiON-SER-v1...")
+        log_progress("INFO: Model berukuran ~3GB, sedang mengunduh dari Hugging Face...")
+        log_progress("INFO: Proses ini hanya terjadi sekali saat pertama kali. Mohon tunggu...")
         
-        emotion_model_name = "superb/wav2vec2-base-superb-er"
-        self.emotion_extractor = AutoFeatureExtractor.from_pretrained(emotion_model_name)
-        self.emotion_model = Wav2Vec2ForSequenceClassification.from_pretrained(emotion_model_name)
+        emotion_model_name = "MERaLiON/MERaLiON-SER-v1"
+        try:
+            self.emotion_extractor = WhisperFeatureExtractor.from_pretrained(emotion_model_name)
+            log_progress("Feature extractor berhasil dimuat, melanjutkan download model...")
+            self.emotion_model = AutoModelForAudioClassification.from_pretrained(
+                emotion_model_name,
+                trust_remote_code=True
+            )
+        except Exception as e:
+            log_progress(f"Error saat memuat model: {e}")
+            log_progress("Mencoba lagi...")
+            raise
+        self.emotion_model.eval()
+        
+        # MERaLiON model labels: ["neutral", "happy", "angry", "sad"]
+        self.emotion_labels = ["neutral", "happy", "angry", "sad"]
         
         if self.device == "cuda":
             self.emotion_model = self.emotion_model.to("cuda")
         
-        log_progress("✓ Model emosi berhasil dimuat")
+        log_progress("✓ Model emosi MERaLiON-SER-v1 berhasil dimuat")
         
         self._models_loaded = True
         
@@ -289,8 +305,82 @@ class AudioProcessor:
         
         return segments_list
     
-    def extract_emotion_complete(self, audio_path: str, segment_duration: float = 15.0) -> Dict:
-        """Extract emotion from audio using Wav2Vec2"""
+    def _preprocess_audio_for_emotion(self, audio_path: str, target_sr: int = 16000) -> Tuple[np.ndarray, int]:
+        """Preprocess audio for emotion analysis using MERaLiON"""
+        # Load audio using pydub for format compatibility
+        audio = AudioSegment.from_file(audio_path)
+        audio = audio.set_channels(1)
+        audio = audio.set_frame_rate(target_sr)
+        
+        samples = np.array(audio.get_array_of_samples()).astype(np.float32)
+        
+        # Normalize to [-1, 1]
+        samples /= np.max(np.abs(samples)) + 1e-9
+        
+        # Silence removal using librosa
+        samples, _ = librosa.effects.trim(samples, top_db=25)
+        
+        # Normalize amplitude
+        samples = librosa.util.normalize(samples)
+        
+        return samples, target_sr
+    
+    def _segment_audio_whisper(self, y: np.ndarray, sr: int, seg_dur: float = 30.0, overlap: float = 0.5) -> List[np.ndarray]:
+        """Segment audio for MERaLiON processing with overlap"""
+        seg_len = int(seg_dur * sr)
+        hop = int(seg_len * (1 - overlap))
+        
+        segments = []
+        for i in range(0, len(y), hop):
+            seg = y[i:i + seg_len]
+            # Only include segments with at least 3 seconds of audio
+            if len(seg) >= sr * 3:
+                segments.append(seg)
+        
+        return segments
+    
+    def _predict_segment_emotion(self, segment: np.ndarray, sr: int) -> Optional[str]:
+        """Predict emotion for a single audio segment using MERaLiON"""
+        # Skip very short segments
+        if len(segment) < sr * 1.5:
+            return None
+        
+        inputs = self.emotion_extractor(
+            segment,
+            sampling_rate=sr,
+            return_tensors="pt"
+        )
+        
+        input_features = inputs["input_features"]
+        
+        # Pad if needed (minimum 3000 frames for Whisper-based model)
+        if input_features.shape[-1] < 3000:
+            pad_len = 3000 - input_features.shape[-1]
+            input_features = torch.nn.functional.pad(
+                input_features,
+                (0, pad_len),
+                value=0.0
+            )
+        
+        if self.device == "cuda":
+            input_features = input_features.to("cuda")
+        
+        with torch.no_grad():
+            outputs = self.emotion_model(input_features=input_features)
+        
+        logits = outputs["logits"] if isinstance(outputs, dict) else outputs.logits
+        probs = torch.softmax(logits, dim=-1)[0]
+        
+        # Map to emotion labels
+        emotion_scores = {
+            self.emotion_labels[i]: probs[i].item()
+            for i in range(len(self.emotion_labels))
+        }
+        
+        return max(emotion_scores, key=emotion_scores.get)
+    
+    def extract_emotion_complete(self, audio_path: str, segment_duration: float = 30.0) -> Dict:
+        """Extract emotion from audio using MERaLiON-SER-v1"""
         if not self._models_loaded:
             self.load_models()
         
@@ -298,47 +388,80 @@ class AudioProcessor:
             tracker = get_tracker()
             tracker.set_step("Menganalisis emosi...")
         
-        log_progress("Memuat file audio untuk analisis emosi...")
-        audio, sr = sf.read(audio_path)
+        log_progress("Memuat dan memproses file audio untuk analisis emosi...")
         
-        # Calculate total segments for progress
-        segment_samples = int(segment_duration * sr)
-        total_segments = (len(audio) // segment_samples)
-        log_progress(f"Durasi audio: {len(audio)/sr:.1f} detik")
-        log_progress(f"Memproses {total_segments} segmen...")
-        
-        # Convert to mono if stereo
-        if len(audio.shape) > 1:
-            audio = audio.mean(axis=1)
-        
-        emotions = []
-        emotion_ids = []
-        
-        log_progress("Menganalisis emosi per segmen...")
-        segment_count = 0
-        for start in range(0, len(audio), segment_samples):
-            segment = audio[start:start + segment_samples]
-            if len(segment) < segment_samples:
-                continue
+        try:
+            # Preprocess audio
+            y, sr = self._preprocess_audio_for_emotion(audio_path)
             
-            segment_count += 1
-            inputs = self.emotion_extractor(segment, sampling_rate=16000, return_tensors="pt")
-            if self.device == "cuda":
-                inputs = {k: v.to("cuda") for k, v in inputs.items()}
+            log_progress(f"Durasi audio: {len(y)/sr:.1f} detik")
             
-            with torch.no_grad():
-                logits = self.emotion_model(**inputs).logits
+            # Segment audio with overlap
+            segments = self._segment_audio_whisper(y, sr, seg_dur=segment_duration, overlap=0.5)
+            total_segments = len(segments)
             
-            pred_id = torch.argmax(logits, dim=-1).item()
-            emotion_label = self.emotion_model.config.id2label[pred_id]
-            emotions.append(emotion_label)
-            emotion_ids.append(pred_id)
+            log_progress(f"Memproses {total_segments} segmen dengan overlap...")
             
-            # Show progress every 3 segments
-            if segment_count % 3 == 0:
-                log_progress(f"  Segmen {segment_count}/{total_segments} diproses...")
+            emotions = []
+            emotion_ids = []
+            
+            log_progress("Menganalisis emosi per segmen...")
+            segment_count = 0
+            
+            for idx, seg in enumerate(segments):
+                emotion = self._predict_segment_emotion(seg, sr)
+                if emotion is not None:
+                    emotions.append(emotion)
+                    emotion_ids.append(self.emotion_labels.index(emotion))
+                    segment_count += 1
+                
+                # Show progress every 3 segments
+                if (idx + 1) % 3 == 0:
+                    log_progress(f"  Segmen {idx + 1}/{total_segments} diproses...")
+            
+            if not emotions:
+                return {
+                    "dominant_emotion": "neutral",
+                    "emotion_distribution": {},
+                    "emotion_percentages": {},
+                    "total_segments": 0,
+                    "emotions_per_segment": []
+                }
+            
+            log_progress(f"✓ Analisis emosi selesai untuk {segment_count} segmen")
+            
+            # Smooth emotions using moving average
+            if len(emotion_ids) > 3:
+                smoothed = uniform_filter1d(emotion_ids, size=3)
+                emotions = [self.emotion_labels[int(round(x))] for x in smoothed]
+            
+            emotion_counts = Counter(emotions)
+            total = len(emotions)
+            
+            # Map emotions to Indonesian for display
+            emotion_map = {
+                'neutral': 'Netral',
+                'happy': 'Senang',
+                'angry': 'Marah',
+                'sad': 'Sedih'
+            }
+            
+            log_progress("Distribusi emosi:")
+            for emotion, count in emotion_counts.most_common():
+                percentage = (count/total)*100
+                emotion_id = emotion_map.get(emotion, emotion.capitalize())
+                log_progress(f"  - {emotion_id}: {percentage:.1f}%")
+            
+            return {
+                "emotions_per_segment": emotions,
+                "dominant_emotion": emotion_counts.most_common(1)[0][0],
+                "emotion_distribution": dict(emotion_counts),
+                "emotion_percentages": {e: (c / total) * 100 for e, c in emotion_counts.items()},
+                "total_segments": total
+            }
         
-        if not emotions:
+        except Exception as e:
+            log_progress(f"Error dalam analisis emosi: {e}")
             return {
                 "dominant_emotion": "neutral",
                 "emotion_distribution": {},
@@ -346,32 +469,6 @@ class AudioProcessor:
                 "total_segments": 0,
                 "emotions_per_segment": []
             }
-        
-        log_progress(f"✓ Analisis emosi selesai untuk {segment_count} segmen")
-        
-        # Smooth emotions using moving average
-        if len(emotion_ids) > 3:
-            smoothed = uniform_filter1d(emotion_ids, size=3)
-            emotions = [self.emotion_model.config.id2label[int(round(x))] for x in smoothed]
-        
-        emotion_counts = Counter(emotions)
-        total = len(emotions)
-        
-        # Map emotions to Indonesian
-        emotion_map = {'neu': 'Netral', 'hap': 'Senang', 'ang': 'Marah', 'sad': 'Sedih'}
-        log_progress("Distribusi emosi:")
-        for emotion, count in emotion_counts.most_common():
-            percentage = (count/total)*100
-            emotion_id = emotion_map.get(emotion, emotion.upper())
-            log_progress(f"  - {emotion_id}: {percentage:.1f}%")
-        
-        return {
-            "emotions_per_segment": emotions,
-            "dominant_emotion": emotion_counts.most_common(1)[0][0],
-            "emotion_distribution": dict(emotion_counts),
-            "emotion_percentages": {e: (c / total) * 100 for e, c in emotion_counts.items()},
-            "total_segments": total
-        }
     
     def summarize_text(self, text: str, num_sentences: Optional[int] = None) -> str:
         """Summarize text using LexRank"""

@@ -13,9 +13,7 @@ Sistem analisis audio cerdas yang menggunakan AI untuk transkripsi, deteksi emos
 
 ### 📊 Analysis & Insights
 - **Topic Segmentation**: Otomatis membagi transkrip ke topik (Tantangan, Strategi, Harapan, Preferensi)
-- **Smart Summarization**: 
-  - **LexRank**: Summarization lokal (cepat, gratis)
-  - **Ollama AI**: Summarization dengan GPT-OSS model (lebih akurat, berbahasa natural)
+- **Smart Summarization**: LexRank algorithm untuk text summarization (cepat, offline)
 - **Emotion Distribution**: Visualisasi distribusi emosi per segmen
 - **WER/CER Evaluation**: Jika ground truth tersedia
 
@@ -35,9 +33,8 @@ Sistem analisis audio cerdas yang menggunakan AI untuk transkripsi, deteksi emos
 ### Backend
 - **Flask**: Web framework
 - **Whisper**: Speech-to-text (OpenAI)
-- **Wav2Vec2**: Emotion recognition
+- **MERaLiON-SER-v1**: Emotion recognition (Speech Emotion Recognition)
 - **LexRank**: Text summarization (ekstraktif)
-- **Ollama**: AI summarization (abstraktif - optional)
 - **PyTorch**: Deep learning framework
 
 ### Frontend
@@ -74,23 +71,9 @@ pip install -r requirements.txt
 python setup_models.py
 ```
 
-⏱️ **Note**: Model download memakan waktu ~5-10 menit (total ~3.5 GB)
+⏱️ **Note**: Model download memakan waktu ~10-20 menit (total ~4.5 GB)
 
-### 5. (Optional) Setup Ollama AI for Advanced Summarization
-
-Untuk menggunakan Ollama AI summarization:
-
-```bash
-# Copy environment template
-cp env.example.txt .env
-
-# Edit .env dan isi API key Anda
-# OLLAMA_API_KEY=your_api_key_here
-```
-
-📖 **Panduan lengkap**: Lihat [QUICK_START_OLLAMA.md](QUICK_START_OLLAMA.md)
-
-### 6. Run Application
+### 5. Run Application
 ```bash
 python run.py
 ```
@@ -125,8 +108,8 @@ flask-nlp-dashboard/
 ├── app/
 │   ├── __init__.py
 │   ├── routes.py              # Flask routes
-│   ├── audio_processor.py     # AI pipeline (Whisper, Wav2Vec2, LexRank)
-│   ├── ollama_summarizer.py   # Ollama AI integration (optional)
+│   ├── audio_processor.py     # AI pipeline (Whisper, MERaLiON, LexRank)
+│   ├── lexrank_summarizer.py  # LexRank text summarization
 │   ├── evaluation.py          # WER/CER metrics
 │   ├── batch_processor.py     # Batch processing
 │   ├── progress_tracker.py    # Real-time logging
@@ -167,14 +150,6 @@ self.model_whisper = whisper.load_model("base")  # Instead of "large-v3"
 - Switch ke model Whisper yang lebih kecil (base/small)
 - Pastikan tidak ada aplikasi lain yang menggunakan CPU/GPU
 
-### Error: "Ollama API key tidak dikonfigurasi"
-**Solusi**: 
-- Buat file `.env` di root project
-- Tambahkan `OLLAMA_API_KEY=your_api_key`
-- Restart aplikasi Flask
-
-**Note**: Ollama AI bersifat **opsional**. Anda tetap bisa menggunakan LexRank summarization tanpa API key.
-
 ## 📸 Screenshots
 
 ### Dashboard
@@ -197,9 +172,9 @@ Developed for academic research at **Universitas Airlangga**
 ## 🙏 Acknowledgments
 
 - **OpenAI Whisper** for speech recognition
-- **Hugging Face Transformers** for emotion detection
-- **LexRank** for extractive text summarization
-- **Ollama** for advanced AI summarization (optional)
+- **MERaLiON** for speech emotion recognition
+- **Hugging Face Transformers** for model infrastructure
+- **LexRank (Sumy)** for extractive text summarization
 
 ---
 
