@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import csv
 import json
 import os
@@ -28,6 +29,10 @@ from flask import (
 )
 from mutagen import File as MutagenFile
 from werkzeug.utils import secure_filename
+from wordcloud import WordCloud
+import matplotlib
+matplotlib.use('Agg')  # Use non-interactive backend
+import matplotlib.pyplot as plt
 
 try:
     from reportlab.lib import colors
@@ -44,13 +49,13 @@ from .audio_processor import get_processor
 from .evaluation import evaluate_transcript, get_clean_text_from_docx
 from .batch_processor import extract_and_discover_files, batch_process_audio_files
 from .progress_tracker import get_tracker, reset_tracker
+from .ollama_summarizer import get_ollama_summarizer
 
 
 bp = Blueprint("main", __name__)
 
 AUDIO_EXT = {".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac", ".wma"}
 TR_EXT = {".txt", ".docx", ".json"}
-PROGRAM_STUDI = ["Teknologi Sains Data", "Bioinformatika", "Data Science", "Sistem Informasi"]
 EMOTIONS = ["Neutral", "Happy", "Sad", "Angry"]
 
 
@@ -86,6 +91,97 @@ def _batches_dir() -> Path:
     d = _storage_dir() / "batches"
     d.mkdir(parents=True, exist_ok=True)
     return d
+
+
+def _wordclouds_dir() -> Path:
+    d = _storage_dir() / "wordclouds"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _generate_wordcloud_hash(records: List[Dict]) -> str:
+    """Generate hash based on all record IDs to detect changes"""
+    import hashlib
+    record_ids = sorted([r.get("id", "") for r in records])
+    hash_input = "".join(record_ids)
+    return hashlib.md5(hash_input.encode()).hexdigest()[:12]
+
+
+def _get_or_generate_wordcloud(records: List[Dict], stopwords: set) -> Optional[str]:
+    """Get cached wordcloud or generate new one with blue gradient"""
+    if not records:
+        return None
+    
+    # Calculate hash based on record IDs
+    wordcloud_hash = _generate_wordcloud_hash(records)
+    wordcloud_file = _wordclouds_dir() / f"wordcloud_{wordcloud_hash}.png"
+    
+    # Check if cached version exists
+    if wordcloud_file.exists():
+        try:
+            # Read cached image and convert to base64
+            with open(wordcloud_file, 'rb') as f:
+                return base64.b64encode(f.read()).decode('utf-8')
+        except Exception as e:
+            current_app.logger.error(f"Error reading cached wordcloud: {e}")
+    
+    # Generate new wordcloud
+    all_text = " ".join(r.get("transcript", "") for r in records)
+    if not all_text.strip():
+        return None
+    
+    try:
+        # Custom color function for blue gradient (darker = more frequent)
+        def blue_color_func(word, font_size, position, orientation, random_state=None, **kwargs):
+            """Generate blue colors - darker for more frequent words"""
+            # font_size is proportional to word frequency
+            # Normalize to 0-1 range (larger font = more frequent)
+            # Max font size in wordcloud is typically around 200-300
+            intensity = min(font_size / 150.0, 1.0)
+            
+            # Generate darker blue for higher intensity
+            # Dark blue: (8, 48, 107) to Light blue: (158, 202, 225)
+            r = int(8 + 150 * (1 - intensity))
+            g = int(48 + 154 * (1 - intensity))
+            b = int(107 + 118 * (1 - intensity))
+            
+            return f'rgb({r},{g},{b})'
+        
+        # Create wordcloud
+        wordcloud = WordCloud(
+            width=800,
+            height=400,
+            background_color='white',
+            stopwords=stopwords,
+            max_words=50,
+            relative_scaling=0.5,
+            min_font_size=10,
+            color_func=blue_color_func,
+            prefer_horizontal=0.7,
+            random_state=42  # Fixed seed for consistent layout
+        ).generate(all_text)
+        
+        # Convert to image
+        plt.figure(figsize=(10, 5))
+        plt.imshow(wordcloud, interpolation='bilinear')
+        plt.axis('off')
+        plt.tight_layout(pad=0)
+        
+        # Save to file (cache)
+        plt.savefig(wordcloud_file, format='png', bbox_inches='tight', dpi=100)
+        
+        # Also save to BytesIO for immediate return
+        buffer = BytesIO()
+        plt.savefig(buffer, format='png', bbox_inches='tight', dpi=100)
+        buffer.seek(0)
+        plt.close()
+        
+        # Convert to base64
+        return base64.b64encode(buffer.getvalue()).decode('utf-8')
+        
+    except Exception as e:
+        current_app.logger.error(f"Error generating wordcloud: {e}")
+        return None
 
 
 def format_duration(seconds: float | int | None) -> str:
@@ -369,8 +465,6 @@ def ingest():
             summary = "Summary unavailable due to processing error."
             wer_cer_metrics = None
         
-        program_studi = random.choice(PROGRAM_STUDI)
-        
         record_data = {
             "id": record_id,
             "audio_filename": audio_filename,
@@ -381,7 +475,6 @@ def ingest():
             "transcript_filename": tr_filename if has_gt else None,
             "emotion_distribution": emotion_dist,
             "dominant_emotion": dominant_emotion,
-            "program_studi": program_studi,
             "label_partisipan": f"P{random.randint(1, 100):03d}",
             "created_at": datetime.now().isoformat(),
             "segments": segments,
@@ -465,33 +558,14 @@ def dashboard():
     all_text = " ".join(r.get("transcript", "") for r in records)
     words = re.findall(r"\b[a-zA-Z]{4,}\b", all_text.lower())
     word_freq = {}
-    stopwords = {"yang", "dari", "untuk", "dengan", "adalah", "pada", "dalam", "ini", "itu", "saya", "kamu", "dia", "mereka"}
+    stopwords = {'yang', 'untuk', 'pada', 'ke', 'para', 'namun', 'menurut', 'antara', 'dia', 'dua', 'ia', 'seperti', 'jika', 'jika', 'sehingga', 'kembali', 'dan', 'tidak', 'ini', 'karena', 'kepada', 'oleh', 'saat', 'harus', 'sementara', 'setelah', 'belum', 'kami', 'sekitar', 'bagi', 'serta', 'di', 'dari', 'telah', 'sebagai', 'masih', 'hal', 'ketika', 'adalah', 'itu', 'dalam', 'bisa', 'bahwa', 'atau', 'hanya', 'kita', 'dengan', 'akan', 'juga', 'ada', 'mereka', 'sudah', 'saya', 'terhadap', 'secara', 'agar', 'lain', 'anda', 'begitu', 'mengapa', 'kenapa', 'yaitu', 'yakni', 'daripada', 'itulah', 'lagi', 'maka', 'tentang', 'demi', 'dimana', 'kemana', 'pula', 'sambil', 'sebelum', 'sesudah', 'supaya', 'guna', 'kah', 'pun', 'sampai', 'sedangkan', 'selagi', 'sementara', 'tetapi', 'apakah', 'kecuali', 'sebab', 'selain', 'seolah', 'seraya', 'seterusnya', 'tanpa', 'agak', 'boleh', 'dapat', 'dsb', 'dst', 'dll', 'dahulu', 'dulunya', 'anu', 'demikian', 'tapi', 'ingin', 'juga', 'nggak', 'mari', 'nanti', 'melainkan', 'oh', 'ok', 'seharusnya', 'sebetulnya', 'setiap', 'setidaknya', 'sesuatu', 'pasti', 'saja', 'toh', 'ya', 'walau', 'tolong', 'tentu', 'amat', 'apalagi', 'bagaimanapun', 'kalau', 'kayak', 'apa', 'jadi', 'terus'}
     for w in words:
         if w not in stopwords:
             word_freq[w] = word_freq.get(w, 0) + 1
     top_keywords = sorted(word_freq.items(), key=lambda x: x[1], reverse=True)[:10]
     
-    # Program studi emotion chart data
-    ps_emotion_data = {}
-    for r in records:
-        ps = r.get("program_studi", "Unknown")
-        dom = r.get("dominant_emotion", "Neutral")
-        if ps not in ps_emotion_data:
-            ps_emotion_data[ps] = {e: 0 for e in EMOTIONS}
-        ps_emotion_data[ps][dom] = ps_emotion_data[ps].get(dom, 0) + 1
-    
-    # Average duration per program studi
-    ps_duration_data = {}
-    for r in records:
-        ps = r.get("program_studi", "Unknown")
-        dur = r.get("duration_sec", 0)
-        if ps not in ps_duration_data:
-            ps_duration_data[ps] = {"total": 0, "count": 0}
-        ps_duration_data[ps]["total"] += dur
-        ps_duration_data[ps]["count"] += 1
-    
-    ps_avg_duration = {ps: data["total"] / data["count"] if data["count"] > 0 else 0 
-                       for ps, data in ps_duration_data.items()}
+    # Get or generate wordcloud (with caching and blue gradient)
+    wordcloud_image = _get_or_generate_wordcloud(records, stopwords)
     
     return render_template(
         "dashboard.html",
@@ -501,8 +575,7 @@ def dashboard():
         avg_duration=avg_duration,
         emotion_counts=emotion_counts,
         top_keywords=top_keywords,
-        ps_emotion_data=ps_emotion_data,
-        ps_avg_duration=ps_avg_duration,
+        wordcloud_image=wordcloud_image,
     )
 
 
@@ -515,6 +588,104 @@ def audio_detail(record_id: str):
         return redirect(url_for("main.dashboard"))
     
     return render_template("audio_detail.html", record=record)
+
+
+@bp.route("/audio/<record_id>/generate-ollama-summary", methods=["POST"])
+def generate_ollama_summary(record_id: str):
+    """Generate summary untuk single audio menggunakan Ollama"""
+    try:
+        record = _load_record(record_id)
+        if not record:
+            return jsonify({"success": False, "error": "Rekaman tidak ditemukan"}), 404
+        
+        # Get transcript
+        transcript = record.get("transcript", "")
+        if not transcript:
+            return jsonify({"success": False, "error": "Transkrip tidak tersedia"}), 400
+        
+        # Get Ollama API key from environment or config
+        import os
+        api_key = os.environ.get('OLLAMA_API_KEY', '')
+        
+        if not api_key:
+            return jsonify({
+                "success": False, 
+                "error": "Ollama API key tidak dikonfigurasi. Set OLLAMA_API_KEY environment variable."
+            }), 400
+        
+        # Initialize Ollama summarizer
+        summarizer = get_ollama_summarizer(api_key=api_key)
+        
+        # Generate summary
+        result = summarizer.generate_summary_4_points(transcript, stream=False)
+        
+        # Save summary to record
+        record['ollama_summary'] = result
+        _save_record(record_id, record)
+        
+        return jsonify({
+            "success": True,
+            "summary": result
+        })
+    
+    except Exception as e:
+        current_app.logger.error(f"Error generating Ollama summary: {e}", exc_info=True)
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+@bp.route("/audio/<record_id>/generate-ollama-summary-stream")
+def generate_ollama_summary_stream(record_id: str):
+    """Generate summary untuk single audio menggunakan Ollama dengan streaming"""
+    from flask import Response, stream_with_context
+    import json
+    
+    def generate():
+        try:
+            record = _load_record(record_id)
+            if not record:
+                yield f"data: {json.dumps({'error': 'Rekaman tidak ditemukan'})}\n\n"
+                return
+            
+            # Get transcript
+            transcript = record.get("transcript", "")
+            if not transcript:
+                yield f"data: {json.dumps({'error': 'Transkrip tidak tersedia'})}\n\n"
+                return
+            
+            # Get Ollama API key
+            import os
+            api_key = os.environ.get('OLLAMA_API_KEY', '')
+            
+            if not api_key:
+                yield f"data: {json.dumps({'error': 'Ollama API key tidak dikonfigurasi'})}\n\n"
+                return
+            
+            # Initialize Ollama summarizer
+            summarizer = get_ollama_summarizer(api_key=api_key)
+            
+            # Stream the summary
+            full_text = ""
+            for chunk in summarizer.generate_summary_4_points(transcript, stream=True):
+                if isinstance(chunk, str):
+                    # This is a text chunk
+                    full_text += chunk
+                    yield f"data: {json.dumps({'chunk': chunk})}\n\n"
+                elif isinstance(chunk, dict):
+                    # This is the final parsed result
+                    # Save to record
+                    record['ollama_summary'] = chunk
+                    _save_record(record_id, record)
+                    
+                    yield f"data: {json.dumps({'done': True, 'summary': chunk})}\n\n"
+        
+        except Exception as e:
+            current_app.logger.error(f"Error in streaming: {e}", exc_info=True)
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+    
+    return Response(stream_with_context(generate()), mimetype='text/event-stream')
 
 
 @bp.route("/summary", methods=["GET", "POST"])
@@ -552,19 +723,31 @@ def summary():
         flash("Tidak ada rekaman yang valid.", "danger")
         return redirect(url_for("main.dashboard"))
     
-    # Generate combined summary using real summarization
-    try:
-        combined_summary_4p = _generate_combined_summary(selected_records)
-    except Exception as e:
-        current_app.logger.error(f"Error generating summary: {e}", exc_info=True)
-        flash(f"⚠️ Error generating summary: {str(e)}", "warning")
-        # Fallback to simple summary
-        combined_summary_4p = {
-            "tantangan": ["Error generating summary"],
-            "solusi": ["Error generating summary"],
-            "harapan": ["Error generating summary"],
-            "preferensi": ["Error generating summary"],
-        }
+    # Check if user requested Ollama summary
+    use_ollama = request.form.get("use_ollama") == "true"
+    
+    if use_ollama:
+        # Generate combined summary using Ollama
+        try:
+            combined_summary_4p = _generate_ollama_batch_summary(selected_records)
+        except Exception as e:
+            current_app.logger.error(f"Error generating Ollama summary: {e}", exc_info=True)
+            flash(f"⚠️ Error generating Ollama summary: {str(e)}. Using LexRank instead.", "warning")
+            combined_summary_4p = _generate_combined_summary(selected_records)
+    else:
+        # Generate combined summary using real summarization (LexRank)
+        try:
+            combined_summary_4p = _generate_combined_summary(selected_records)
+        except Exception as e:
+            current_app.logger.error(f"Error generating summary: {e}", exc_info=True)
+            flash(f"⚠️ Error generating summary: {str(e)}", "warning")
+            # Fallback to simple summary
+            combined_summary_4p = {
+                "tantangan": ["Error generating summary"],
+                "solusi": ["Error generating summary"],
+                "harapan": ["Error generating summary"],
+                "preferensi": ["Error generating summary"],
+            }
     
     batch_id = uuid.uuid4().hex[:12]
     batch_data = {
@@ -573,10 +756,65 @@ def summary():
         "selected_count": len(selected_records),
         "combined_summary_4p": combined_summary_4p,
         "created_at": datetime.now().isoformat(),
+        "summarizer": "ollama" if use_ollama else "lexrank"
     }
     _save_batch(batch_id, batch_data)
     
-    return render_template("summary.html", records=selected_records, summaries=combined_summary_4p, batch_id=batch_id)
+    return render_template("summary.html", records=selected_records, summaries=combined_summary_4p, batch_id=batch_id, summarizer="ollama" if use_ollama else "lexrank")
+
+
+def _generate_ollama_batch_summary(selected_records: List[Dict]) -> Dict[str, List[str]]:
+    """Generate batch summary menggunakan Ollama"""
+    print("\n" + "="*60)
+    print("GENERATING BATCH SUMMARY WITH OLLAMA")
+    print("="*60)
+    print(f"Processing {len(selected_records)} records...")
+    
+    # Get API key
+    import os
+    api_key = os.environ.get('OLLAMA_API_KEY', '')
+    
+    if not api_key:
+        raise ValueError("Ollama API key tidak dikonfigurasi. Set OLLAMA_API_KEY environment variable.")
+    
+    # Collect all transcripts
+    transcripts = []
+    for record in selected_records:
+        transcript = record.get("transcript", "")
+        if transcript:
+            transcripts.append(transcript)
+            print(f"  - {record.get('audio_name', 'Unknown')}: {len(transcript.split())} words")
+    
+    if not transcripts:
+        raise ValueError("Tidak ada transkrip yang tersedia")
+    
+    # Initialize Ollama summarizer
+    summarizer = get_ollama_summarizer(api_key=api_key)
+    
+    # Generate batch summary
+    print("\nGenerating summary with Ollama AI...")
+    result = summarizer.generate_batch_summary(transcripts)
+    
+    print("\n" + "="*60)
+    print("OLLAMA BATCH SUMMARY COMPLETE")
+    print("="*60)
+    
+    # Debug: Print what we got
+    print("\n--- DEBUG: Hasil dari Ollama ---")
+    print(f"Full summary length: {len(result.get('full_summary', ''))}")
+    print(f"Tantangan: {result['tantangan'][:100]}..." if len(result['tantangan']) > 100 else f"Tantangan: {result['tantangan']}")
+    print(f"Solusi: {result['solusi'][:100]}..." if len(result['solusi']) > 100 else f"Solusi: {result['solusi']}")
+    print(f"Harapan: {result['harapan'][:100]}..." if len(result['harapan']) > 100 else f"Harapan: {result['harapan']}")
+    print(f"Preferensi: {result['preferensi'][:100]}..." if len(result['preferensi']) > 100 else f"Preferensi: {result['preferensi']}")
+    print("--- END DEBUG ---\n")
+    
+    # Convert to expected format (list of strings per category)
+    return {
+        "tantangan": [result['tantangan']] if result['tantangan'] else ["Tidak ada data tantangan"],
+        "solusi": [result['solusi']] if result['solusi'] else ["Tidak ada data solusi"],
+        "harapan": [result['harapan']] if result['harapan'] else ["Tidak ada data harapan"],
+        "preferensi": [result['preferensi']] if result['preferensi'] else ["Tidak ada data preferensi"],
+    }
 
 
 def _generate_combined_summary(selected_records: List[Dict]) -> Dict[str, List[str]]:
@@ -793,12 +1031,6 @@ def export_csv():
     return response
 
 
-@bp.route("/about")
-def about():
-    """About page"""
-    return render_template("about.html")
-
-
 @bp.route("/media/uploads/<filename>")
 def media_upload(filename: str):
     """Serve uploaded audio files"""
@@ -994,7 +1226,6 @@ def batch_upload():
                     "transcript_filename": None,
                     "emotion_distribution": emotion_dist,
                     "dominant_emotion": dominant_emotion,
-                    "program_studi": random.choice(PROGRAM_STUDI),
                     "label_partisipan": f"B{batch_id[:4]}-{random.randint(1, 99):02d}",
                     "created_at": datetime.now().isoformat(),
                     "segments": trans_data['segments'],

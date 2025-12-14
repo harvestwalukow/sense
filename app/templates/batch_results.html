@@ -127,7 +127,6 @@
                         <tr>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">File Name</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Emotion</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Program Studi</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                         </tr>
                     </thead>
@@ -145,9 +144,6 @@
                                     {% else %}bg-gray-100 text-gray-800{% endif %}">
                                     {{ record.dominant_emotion }}
                                 </span>
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                {{ record.program_studi }}
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                 <a href="{{ url_for('main.audio_detail', record_id=record.id) }}" class="text-blue-600 hover:text-blue-900">
@@ -206,4 +202,5 @@
     </div>
 </div>
 {% endblock %}
+
 

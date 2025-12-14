@@ -11,7 +11,7 @@
 </head>
 <body class="bg-soft">
   <!-- Navbar -->
-  <nav class="navbar navbar-expand-lg navbar-ftmm navbar-dark shadow-sm">
+  <nav class="navbar navbar-expand-lg navbar-ftmm navbar-dark shadow-sm position-fixed top-0 w-100" style="z-index: 1030;">
     <div class="container">
       <a class="navbar-brand fw-bold" href="{{ url_for('main.index') }}">
         <div class="d-flex align-items-center gap-2">
@@ -28,9 +28,7 @@
       <div class="collapse navbar-collapse" id="navMain">
         <ul class="navbar-nav ms-auto mb-2 mb-lg-0 align-items-lg-center" style="gap: 18px;">
           <li class="nav-item"><a class="nav-link" href="{{ url_for('main.index') }}">Beranda</a></li>
-          <li class="nav-item"><a class="nav-link" href="{{ url_for('main.ingest') }}">Input Rekaman</a></li>
           <li class="nav-item"><a class="nav-link" href="{{ url_for('main.dashboard') }}">Dashboard</a></li>
-          <li class="nav-item"><a class="nav-link" href="{{ url_for('main.about') }}">About</a></li>
           <li class="nav-item">
             <a class="btn btn-gold px-3" href="{{ url_for('main.ingest') }}">Mulai Input</a>
           </li>
@@ -39,7 +37,7 @@
     </div>
   </nav>
 
-  <main class="page-content">
+  <main class="page-content" style="padding-top: 80px;">
     {% block content %}{% endblock %}
   </main>
 

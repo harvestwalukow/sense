@@ -11,16 +11,10 @@
         <p class="text-white-80 mb-4">Teknologi Sains Data – Universitas Airlangga</p>
         <div class="d-flex flex-wrap gap-3 justify-content-center">
           <a href="{{ url_for('main.ingest') }}" class="btn btn-hero-primary btn-lg px-4">
-            <i class="bi bi-mic-fill me-2"></i>Single Audio
-          </a>
-          <a href="{{ url_for('main.batch_upload') }}" class="btn btn-hero-primary btn-lg px-4">
-            <i class="bi bi-collection me-2"></i>Batch Upload
+            <i class="bi bi-mic-fill me-2"></i>Input Rekaman
           </a>
           <a href="{{ url_for('main.dashboard') }}" class="btn btn-hero-secondary btn-lg px-4">
             <i class="bi bi-bar-chart me-2"></i>Dashboard
-          </a>
-          <a href="{{ url_for('main.init_models') }}" class="btn btn-outline-light btn-lg px-4">
-            <i class="bi bi-lightning me-2"></i>Load Models
           </a>
         </div>
       </div>
@@ -72,14 +66,54 @@
   </div>
 </section>
 
-<!-- Alur Section -->
-<section class="alur-section mb-5">
+<!-- About Section -->
+<section class="about-section py-5 bg-light">
   <div class="container">
-    <div class="alur-box text-center py-3">
-      <p class="mb-0 text-secondary">
-        <i class="bi bi-arrow-right-circle-fill text-primary me-2"></i>
-        <strong>Alur:</strong> Input → Dashboard → Select → Summary
-      </p>
+    <div class="row justify-content-center">
+      <div class="col-lg-8">
+        <div class="text-center mb-5">
+          <h2 class="fw-bold text-primary mb-2">About SENSE</h2>
+          <p class="lead text-secondary">Student Experience aNd Sentiment Explorer</p>
+        </div>
+
+        <div class="card-modern shadow-soft mb-4">
+          <h4 class="fw-bold text-primary mb-3">
+            <i class="bi bi-info-circle me-2"></i>Tentang Aplikasi
+          </h4>
+          <p class="text-secondary">
+            SENSE adalah aplikasi modern untuk mengeksplorasi pengalaman mahasiswa melalui analisis audio dan transkrip. 
+            Aplikasi ini dikembangkan oleh <strong>Teknologi Sains Data – Universitas Airlangga</strong>.
+          </p>
+        </div>
+
+        <div class="card-modern shadow-soft mb-4">
+          <h4 class="fw-bold text-primary mb-3">
+            <i class="bi bi-list-check me-2"></i>Fitur Utama
+          </h4>
+          <ul class="feature-list">
+            <li>
+              <i class="bi bi-check-circle-fill text-success me-2"></i>
+              <strong>Input Rekaman:</strong> Unggah audio dengan atau tanpa Ground Truth (GT) transcript
+            </li>
+            <li>
+              <i class="bi bi-check-circle-fill text-success me-2"></i>
+              <strong>Analisis Emosi:</strong> Distribusi emosi (Neutral, Happy, Sad, Angry) untuk setiap rekaman
+            </li>
+            <li>
+              <i class="bi bi-check-circle-fill text-success me-2"></i>
+              <strong>Dashboard Global:</strong> Statistik, charts, wordcloud, dan tabel history
+            </li>
+            <li>
+              <i class="bi bi-check-circle-fill text-success me-2"></i>
+              <strong>Batch Summary:</strong> Generate ringkasan 4 poin untuk beberapa rekaman sekaligus
+            </li>
+            <li>
+              <i class="bi bi-check-circle-fill text-success me-2"></i>
+              <strong>Export:</strong> Download summary sebagai PDF atau CSV
+            </li>
+          </ul>
+        </div>
+      </div>
     </div>
   </div>
 </section>

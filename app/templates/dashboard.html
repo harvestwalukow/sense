@@ -2,18 +2,35 @@
 {% set title = "Dashboard | SENSE" %}
 {% block extra_head %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  .wordcloud-container {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+    gap: 15px;
+    padding: 20px;
+    min-height: 300px;
+  }
+  .word-item {
+    display: inline-block;
+    padding: 5px 10px;
+    transition: all 0.3s ease;
+    cursor: default;
+    font-weight: 600;
+    color: #0b2e5b;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
+  }
+  .word-item:hover {
+    transform: scale(1.1);
+    color: #2563eb;
+  }
+</style>
 {% endblock %}
 {% block content %}
 <div class="container py-4">
   <div class="page-header mb-4">
     <div class="d-flex justify-content-between align-items-center">
-      <div>
-        <h2 class="fw-bold text-primary mb-2">Dashboard Global</h2>
-        <p class="text-secondary">Analisis keseluruhan rekaman wawancara</p>
-      </div>
-      <a href="{{ url_for('main.ingest') }}" class="btn btn-primary">
-        <i class="bi bi-plus-circle me-2"></i>Input Baru
-      </a>
     </div>
   </div>
 
@@ -87,32 +104,39 @@
       </div>
     </div>
 
-    <!-- Row 2: Charts -->
+    <!-- Row 2: Charts - Side by Side -->
     <div class="row g-4 mb-4">
-      <!-- Chart: Emosi per Program Studi -->
+      <!-- Chart: Durasi per File Audio -->
       <div class="col-lg-6">
-        <div class="card-modern shadow-soft">
-          <h5 class="fw-bold text-primary mb-3">Emosi per Program Studi</h5>
-          <canvas id="emotionChart"></canvas>
-        </div>
-      </div>
-
-      <!-- Chart: Durasi Rata-rata -->
-      <div class="col-lg-6">
-        <div class="card-modern shadow-soft">
-          <h5 class="fw-bold text-primary mb-3">Durasi Rata-rata Wawancara</h5>
+        <div class="card-modern shadow-soft h-100">
+          <h5 class="fw-bold text-primary mb-3">Durasi per File Audio</h5>
           <canvas id="durationChart"></canvas>
         </div>
       </div>
-    </div>
 
-    <!-- Wordcloud Global -->
-    <div class="card-modern shadow-soft mb-4">
-      <h5 class="fw-bold text-primary mb-3">Wordcloud Topik Wawancara</h5>
-      <div class="wordcloud-placeholder text-center py-5 bg-light rounded-3">
-        <i class="bi bi-cloud text-primary" style="font-size: 4rem;"></i>
-        <p class="text-secondary mt-3 mb-0">Wordcloud akan ditampilkan di sini</p>
-        <small class="text-muted">(Global wordcloud dari semua transkrip)</small>
+      <!-- Wordcloud Global -->
+      <div class="col-lg-6">
+        <div class="card-modern shadow-soft h-100">
+          <h5 class="fw-bold text-primary mb-3">Wordcloud Topik Wawancara</h5>
+          <div class="wordcloud-container bg-light rounded-3" id="wordcloudContainer">
+            {% if wordcloud_image %}
+              <img src="data:image/png;base64,{{ wordcloud_image }}" alt="Wordcloud" class="img-fluid rounded-3" style="width: 100%; height: auto;">
+            {% elif top_keywords and top_keywords|length > 0 %}
+              {% set max_count = top_keywords[0][1] %}
+              {% for word, count in top_keywords %}
+                {% set size = 16 + (count / max_count * 48) %}
+                <span class="word-item" style="font-size: {{ size }}px;" title="Frekuensi: {{ count }}">
+                  {{ word }}
+                </span>
+              {% endfor %}
+            {% else %}
+              <div class="text-center w-100 py-5">
+                <i class="bi bi-cloud text-secondary" style="font-size: 4rem;"></i>
+                <p class="text-secondary mt-3 mb-0">Belum ada data transkrip</p>
+              </div>
+            {% endif %}
+          </div>
+        </div>
       </div>
     </div>
 
@@ -120,19 +144,25 @@
     <div class="card-modern shadow-soft">
       <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
         <h5 class="fw-bold text-primary mb-0">History Rekaman</h5>
-        <div class="d-flex gap-2">
+        <div class="d-flex gap-2 flex-wrap">
+          <!-- Selected Summary Form (Ollama Only) -->
           <form method="post" action="{{ url_for('main.summary') }}" id="summaryForm" style="display: none;" onsubmit="showSummaryLoading(event, this)">
             <div id="selectedInputs"></div>
-            <button type="submit" class="btn btn-gold" id="generateBtn">
-              <i class="bi bi-file-text me-2"></i>Generate Summary (Selected) (<span id="selectedCount">0</span>)
+            <input type="hidden" name="use_ollama" value="true">
+            <button type="submit" class="btn btn-primary" id="generateBtn">
+              <i class="bi bi-stars me-2"></i>Summarize (<span id="selectedCount">0</span> dipilih)
             </button>
           </form>
+          
+          <!-- Summary All Form (Ollama Only) -->
           <form method="post" action="{{ url_for('main.summary') }}" id="summaryAllForm" onsubmit="showSummaryLoading(event, this)">
             <input type="hidden" name="generate_all" value="true">
-            <button type="submit" class="btn btn-outline-primary" id="generateAllBtn">
-              <i class="bi bi-file-text me-2"></i>Generate Summary (All)
+            <input type="hidden" name="use_ollama" value="true">
+            <button type="submit" class="btn btn-primary">
+              <i class="bi bi-stars me-2"></i>Summarize (Semua)
             </button>
           </form>
+          
           <button type="button" class="btn btn-outline-danger" onclick="confirmDeleteAll()">
             <i class="bi bi-trash me-2"></i>Hapus Semua
           </button>
@@ -141,7 +171,7 @@
 
       <!-- Search Bar -->
       <div class="mb-3">
-        <input type="text" class="form-control" id="searchInput" placeholder="Cari berdasarkan kode audio, label partisipan, atau program studi...">
+        <input type="text" class="form-control" id="searchInput" placeholder="Cari berdasarkan kode audio atau label partisipan...">
       </div>
 
       <div class="table-responsive">
@@ -153,7 +183,6 @@
               </th>
               <th>Kode Audio</th>
               <th>Label Partisipan</th>
-              <th>Program Studi</th>
               <th>Emosi Dominan</th>
               <th>Status</th>
               <th width="120">Action</th>
@@ -161,7 +190,7 @@
           </thead>
           <tbody>
             {% for record in records %}
-            <tr data-record-id="{{ record.id }}" data-search-text="{{ (record.id + ' ' + record.get('label_partisipan', '') + ' ' + record.get('program_studi', '')).lower() }}">
+            <tr data-record-id="{{ record.id }}" data-search-text="{{ (record.id + ' ' + record.get('label_partisipan', '')).lower() }}">
               <td>
                 <input type="checkbox" class="form-check-input record-checkbox" name="selected_ids" value="{{ record.id }}">
               </td>
@@ -169,7 +198,6 @@
                 <div class="fw-semibold">{{ record.id[:8] }}...</div>
               </td>
               <td>{{ record.get('label_partisipan', 'N/A') }}</td>
-              <td>{{ record.get('program_studi', 'N/A') }}</td>
               <td>
                 <span class="badge bg-primary">{{ record.get('dominant_emotion', 'Neutral') }}</span>
               </td>
@@ -197,61 +225,119 @@
 
 <script>
 // Chart data
-const psEmotionData = {{ ps_emotion_data | tojson }};
-const psDurationData = {{ ps_avg_duration | tojson }};
-
-// Emotion Chart (Stacked Bar)
-const emotionCtx = document.getElementById('emotionChart');
-if (emotionCtx) {
-  const programs = Object.keys(psEmotionData);
-  const emotions = ['Neutral', 'Happy', 'Sad', 'Angry'];
-  const colors = {
+// Duration Chart (Bar) - Shows duration per audio file
+const durationCtx = document.getElementById('durationChart');
+if (durationCtx) {
+  const records = {{ records | tojson }};
+  
+  // Prepare data for each audio file
+  const labels = records.map(r => r.label_partisipan || r.id.substring(0, 8));
+  const durations = records.map(r => Math.round((r.duration_sec || 0) / 60)); // Convert to minutes
+  const emotions = records.map(r => r.dominant_emotion || 'Neutral');
+  
+  // Calculate average duration
+  const avgDuration = durations.length > 0 ? durations.reduce((a, b) => a + b, 0) / durations.length : 0;
+  
+  // Color based on emotion
+  const emotionColors = {
     'Neutral': 'rgba(108, 117, 125, 0.8)',
     'Happy': 'rgba(40, 167, 69, 0.8)',
     'Sad': 'rgba(0, 123, 255, 0.8)',
     'Angry': 'rgba(220, 53, 69, 0.8)'
   };
   
-  new Chart(emotionCtx, {
-    type: 'bar',
-    data: {
-      labels: programs,
-      datasets: emotions.map(emotion => ({
-        label: emotion,
-        data: programs.map(ps => (psEmotionData[ps] && psEmotionData[ps][emotion]) || 0),
-        backgroundColor: colors[emotion]
-      }))
-    },
-    options: {
-      responsive: true,
-      scales: {
-        x: { stacked: true },
-        y: { stacked: true, beginAtZero: true }
-      }
-    }
-  });
-}
-
-// Duration Chart (Bar)
-const durationCtx = document.getElementById('durationChart');
-if (durationCtx) {
-  const programs = Object.keys(psDurationData);
-  const durations = programs.map(ps => Math.round(psDurationData[ps] / 60)); // Convert to minutes
+  const backgroundColors = emotions.map(e => emotionColors[e] || emotionColors['Neutral']);
   
   new Chart(durationCtx, {
     type: 'bar',
     data: {
-      labels: programs,
-      datasets: [{
-        label: 'Durasi (menit)',
-        data: durations,
-        backgroundColor: 'rgba(11, 46, 91, 0.8)'
-      }]
+      labels: labels,
+      datasets: [
+        {
+          label: 'Durasi (menit)',
+          data: durations,
+          backgroundColor: backgroundColors,
+          borderColor: backgroundColors.map(c => c.replace('0.8', '1')),
+          borderWidth: 1,
+          type: 'bar',
+          order: 2
+        },
+        {
+          label: 'Rata-rata',
+          data: Array(durations.length).fill(avgDuration),
+          type: 'line',
+          borderColor: 'rgba(220, 53, 69, 1)',
+          backgroundColor: 'rgba(220, 53, 69, 0.1)',
+          borderWidth: 3,
+          borderDash: [5, 5],
+          pointRadius: 0,
+          pointHoverRadius: 0,
+          fill: false,
+          tension: 0,
+          order: 1,
+          spanGaps: true
+        }
+      ]
     },
     options: {
       responsive: true,
+      maintainAspectRatio: true,
+      interaction: {
+        mode: 'index',
+        intersect: false,
+      },
       scales: {
-        y: { beginAtZero: true }
+        y: { 
+          beginAtZero: true,
+          title: {
+            display: true,
+            text: 'Durasi (menit)'
+          }
+        },
+        x: {
+          title: {
+            display: true,
+            text: 'File Audio (Label Partisipan)'
+          },
+          ticks: {
+            maxRotation: 45,
+            minRotation: 45
+          }
+        }
+      },
+      plugins: {
+        legend: {
+          display: false
+        },
+        tooltip: {
+          callbacks: {
+            label: function(context) {
+              if (context.dataset.label === 'Rata-rata') {
+                return 'Rata-rata: ' + context.parsed.y.toFixed(1) + ' menit';
+              }
+              const record = records[context.dataIndex];
+              return [
+                'Durasi: ' + context.parsed.y + ' menit',
+                'Emosi: ' + (record.dominant_emotion || 'Neutral')
+              ];
+            }
+          }
+        },
+        annotation: {
+          annotations: {
+            line1: {
+              type: 'line',
+              yMin: avgDuration,
+              yMax: avgDuration,
+              borderColor: 'rgba(220, 53, 69, 1)',
+              borderWidth: 3,
+              borderDash: [5, 5],
+              label: {
+                display: false
+              }
+            }
+          }
+        }
       }
     }
   });
@@ -324,7 +410,8 @@ function confirmDeleteAll() {
 }
 
 function showSummaryLoading(event, form) {
-  const button = form.querySelector('button[type="submit"]');
+  const button = event.submitter || form.querySelector('button[type="submit"]');
+  
   if (button) {
     button.disabled = true;
     button.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Generating Summary...';
@@ -337,11 +424,11 @@ function showSummaryLoading(event, form) {
   loadingDiv.innerHTML = `
     <div class="d-flex align-items-center">
       <div class="spinner-border spinner-border-sm me-2"></div>
-      <strong>Menghasilkan ringkasan dengan AI...</strong>
+      <strong>Menghasilkan ringkasan dengan Ollama AI...</strong>
     </div>
     <div class="mt-2 small">
-      Proses ini menggunakan LexRank summarization untuk menganalisis semua transkrip.<br>
-      Waktu proses: ~10-30 detik tergantung jumlah rekaman.<br>
+      Proses ini menggunakan Ollama GPT-OSS model untuk menganalisis semua transkrip.<br>
+      Waktu proses: ~30-60 detik tergantung jumlah rekaman dan kecepatan API.<br>
       Mohon tunggu, jangan refresh halaman.
     </div>
   `;
