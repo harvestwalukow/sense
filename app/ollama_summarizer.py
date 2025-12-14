@@ -210,3 +210,4 @@ def get_ollama_summarizer(host: str = "https://ollama.com", api_key: Optional[st
     if _summarizer_instance is None:
         _summarizer_instance = OllamaSummarizer(host=host, api_key=api_key)
     return _summarizer_instance
+

@@ -100,15 +100,18 @@ def _wordclouds_dir() -> Path:
 
 
 def _generate_wordcloud_hash(records: List[Dict]) -> str:
-    """Generate hash based on all record IDs to detect changes"""
+    """Generate hash to detect when wordcloud must be regenerated"""
     import hashlib
+    # Bump this string whenever the wordcloud generation parameters/styles change,
+    # so cached images are invalidated automatically.
+    style_version = "rainbow-v1"
     record_ids = sorted([r.get("id", "") for r in records])
-    hash_input = "".join(record_ids)
+    hash_input = style_version + "|" + "".join(record_ids)
     return hashlib.md5(hash_input.encode()).hexdigest()[:12]
 
 
 def _get_or_generate_wordcloud(records: List[Dict], stopwords: set) -> Optional[str]:
-    """Get cached wordcloud or generate new one with blue gradient"""
+    """Get cached wordcloud or generate a new one"""
     if not records:
         return None
     
@@ -131,19 +134,42 @@ def _get_or_generate_wordcloud(records: List[Dict], stopwords: set) -> Optional[
         return None
     
     try:
-        # Custom color function for blue gradient (darker = more frequent)
-        def blue_color_func(word, font_size, position, orientation, random_state=None, **kwargs):
-            """Generate blue colors - darker for more frequent words"""
-            # font_size is proportional to word frequency
-            # Normalize to 0-1 range (larger font = more frequent)
-            # Max font size in wordcloud is typically around 200-300
-            intensity = min(font_size / 150.0, 1.0)
+        # Custom color function for vibrant rainbow colors
+        def rainbow_color_func(word, font_size, position, orientation, random_state=None, **kwargs):
+            """Generate vibrant rainbow colors for more visual appeal"""
+            # Define a palette of vibrant colors
+            color_palette = [
+                (220, 38, 127),   # Pink/Magenta
+                (156, 39, 176),   # Purple
+                (63, 81, 181),    # Indigo
+                (33, 150, 243),   # Blue
+                (0, 188, 212),    # Cyan
+                (0, 150, 136),    # Teal
+                (76, 175, 80),    # Green
+                (139, 195, 74),   # Light Green
+                (255, 193, 7),    # Amber
+                (255, 152, 0),    # Orange
+                (255, 87, 34),    # Deep Orange
+                (244, 67, 54),    # Red
+            ]
             
-            # Generate darker blue for higher intensity
-            # Dark blue: (8, 48, 107) to Light blue: (158, 202, 225)
-            r = int(8 + 150 * (1 - intensity))
-            g = int(48 + 154 * (1 - intensity))
-            b = int(107 + 118 * (1 - intensity))
+            # Use position to semi-randomly select color (deterministic based on position)
+            import hashlib
+            # Create a hash from word and position for consistent coloring
+            hash_input = f"{word}_{position[0]}_{position[1]}"
+            hash_val = int(hashlib.md5(hash_input.encode()).hexdigest(), 16)
+            color_index = hash_val % len(color_palette)
+            
+            r, g, b = color_palette[color_index]
+            
+            # Adjust intensity based on font size (more frequent = more saturated)
+            intensity = min(font_size / 150.0, 1.0)
+            saturation = 0.6 + (0.4 * intensity)  # 60% to 100% saturation
+            
+            # Apply saturation adjustment
+            r = int(r * saturation + 255 * (1 - saturation))
+            g = int(g * saturation + 255 * (1 - saturation))
+            b = int(b * saturation + 255 * (1 - saturation))
             
             return f'rgb({r},{g},{b})'
         
@@ -156,7 +182,7 @@ def _get_or_generate_wordcloud(records: List[Dict], stopwords: set) -> Optional[
             max_words=50,
             relative_scaling=0.5,
             min_font_size=10,
-            color_func=blue_color_func,
+            color_func=rainbow_color_func,
             prefer_horizontal=0.7,
             random_state=42  # Fixed seed for consistent layout
         ).generate(all_text)

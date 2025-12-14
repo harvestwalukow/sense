@@ -18,12 +18,12 @@
     transition: all 0.3s ease;
     cursor: default;
     font-weight: 600;
-    color: #0b2e5b;
+    color: var(--word-color, #0b2e5b);
     text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
   }
   .word-item:hover {
     transform: scale(1.1);
-    color: #2563eb;
+    filter: brightness(1.05);
   }
 </style>
 {% endblock %}
@@ -123,9 +123,10 @@
               <img src="data:image/png;base64,{{ wordcloud_image }}" alt="Wordcloud" class="img-fluid rounded-3" style="width: 100%; height: auto;">
             {% elif top_keywords and top_keywords|length > 0 %}
               {% set max_count = top_keywords[0][1] %}
+              {% set palette = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#06b6d4', '#3b82f6', '#8b5cf6', '#ec4899'] %}
               {% for word, count in top_keywords %}
                 {% set size = 16 + (count / max_count * 48) %}
-                <span class="word-item" style="font-size: {{ size }}px;" title="Frekuensi: {{ count }}">
+                <span class="word-item" style="font-size: {{ size }}px; --word-color: {{ palette[loop.index0 % (palette|length)] }};" title="Frekuensi: {{ count }}">
                   {{ word }}
                 </span>
               {% endfor %}
@@ -145,21 +146,13 @@
       <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
         <h5 class="fw-bold text-primary mb-0">History Rekaman</h5>
         <div class="d-flex gap-2 flex-wrap">
-          <!-- Selected Summary Form (Ollama Only) -->
-          <form method="post" action="{{ url_for('main.summary') }}" id="summaryForm" style="display: none;" onsubmit="showSummaryLoading(event, this)">
+          <!-- Single Summarize Button (default: all, if selected: only selected) -->
+          <form method="post" action="{{ url_for('main.summary') }}" id="summaryForm" onsubmit="showSummaryLoading(event, this)">
             <div id="selectedInputs"></div>
+            <input type="hidden" name="generate_all" value="true" id="generateAllInput">
             <input type="hidden" name="use_ollama" value="true">
-            <button type="submit" class="btn btn-primary" id="generateBtn">
-              <i class="bi bi-stars me-2"></i>Summarize (<span id="selectedCount">0</span> dipilih)
-            </button>
-          </form>
-          
-          <!-- Summary All Form (Ollama Only) -->
-          <form method="post" action="{{ url_for('main.summary') }}" id="summaryAllForm" onsubmit="showSummaryLoading(event, this)">
-            <input type="hidden" name="generate_all" value="true">
-            <input type="hidden" name="use_ollama" value="true">
-            <button type="submit" class="btn btn-primary">
-              <i class="bi bi-stars me-2"></i>Summarize (Semua)
+            <button type="submit" class="btn btn-primary" id="summarizeBtn">
+              <i class="bi bi-stars me-2"></i>Summarize
             </button>
           </form>
           
@@ -182,7 +175,9 @@
                 <input type="checkbox" class="form-check-input" id="checkAll">
               </th>
               <th>Kode Audio</th>
+              <th>Nama File</th>
               <th>Label Partisipan</th>
+              <th>Tanggal</th>
               <th>Emosi Dominan</th>
               <th>Status</th>
               <th width="120">Action</th>
@@ -190,14 +185,23 @@
           </thead>
           <tbody>
             {% for record in records %}
-            <tr data-record-id="{{ record.id }}" data-search-text="{{ (record.id + ' ' + record.get('label_partisipan', '')).lower() }}">
+            <tr data-record-id="{{ record.id }}" data-search-text="{{ (record.id + ' ' + record.get('label_partisipan', '') + ' ' + record.get('audio_name', '')).lower() }}">
               <td>
                 <input type="checkbox" class="form-check-input record-checkbox" name="selected_ids" value="{{ record.id }}">
               </td>
               <td>
                 <div class="fw-semibold">{{ record.id[:8] }}...</div>
               </td>
+              <td>{{ record.get('audio_name', '-') }}</td>
               <td>{{ record.get('label_partisipan', 'N/A') }}</td>
+              <td>
+                {% set created_at = record.get('created_at', '') %}
+                {% if created_at %}
+                  {{ (created_at|replace('T', ' '))[:16] }}
+                {% else %}
+                  -
+                {% endif %}
+              </td>
               <td>
                 <span class="badge bg-primary">{{ record.get('dominant_emotion', 'Neutral') }}</span>
               </td>
@@ -364,21 +368,35 @@ document.querySelectorAll('.record-checkbox').forEach(cb => {
   cb.addEventListener('change', updateSelectedCount);
 });
 
+// Initialize button text/state
+updateSelectedCount();
+
 function updateSelectedCount() {
   const checked = document.querySelectorAll('.record-checkbox:checked');
   const count = checked.length;
-  document.getElementById('selectedCount').textContent = count;
-  document.getElementById('summaryForm').style.display = count > 0 ? 'inline-block' : 'none';
+  const summarizeBtn = document.getElementById('summarizeBtn');
+  const generateAllInput = document.getElementById('generateAllInput');
   
   const inputsContainer = document.getElementById('selectedInputs');
   inputsContainer.innerHTML = '';
-  checked.forEach(cb => {
-    const input = document.createElement('input');
-    input.type = 'hidden';
-    input.name = 'selected_ids';
-    input.value = cb.value;
-    inputsContainer.appendChild(input);
-  });
+  if (count > 0) {
+    // summarize selected only
+    if (generateAllInput) generateAllInput.disabled = true;
+    checked.forEach(cb => {
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = 'selected_ids';
+      input.value = cb.value;
+      inputsContainer.appendChild(input);
+    });
+  } else {
+    // default summarize all
+    if (generateAllInput) generateAllInput.disabled = false;
+  }
+
+  if (summarizeBtn) {
+    summarizeBtn.innerHTML = `<i class="bi bi-stars me-2"></i>Summarize${count > 0 ? ` (${count} dipilih)` : ''}`;
+  }
   
   const allCheckboxes = document.querySelectorAll('.record-checkbox');
   const allChecked = allCheckboxes.length > 0 && Array.from(allCheckboxes).every(cb => cb.checked);

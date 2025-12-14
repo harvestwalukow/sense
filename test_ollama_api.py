@@ -81,3 +81,4 @@ if __name__ == "__main__":
     print("\n" + "="*60)
     print("Setelah fix, jalankan aplikasi Flask dengan: python run.py")
     print("="*60)
+
