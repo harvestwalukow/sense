@@ -56,12 +56,16 @@ def extract_and_discover_files(folder_path: Path, extract_dir: Path) -> Dict:
             if file_path.suffix.lower() in AUDIO_EXTS:
                 audio_files.append(file_path)
             
-            # Detect ground truth
-            elif file_lower.endswith('.docx'):
+            # Detect ground truth (DOCX/TXT/JSON)
+            elif file_lower.endswith(('.docx', '.txt', '.json')):
                 folder_name = Path(root).name.lower()
                 # Check if in GT folder or has gt_ prefix
                 if any(kw in folder_name for kw in ['ground', 'gt', 'transkrip', 'truth']) or file_lower.startswith('gt_'):
-                    key = file.replace('.docx', '').replace('gt_', '').replace('GT_', '').strip()
+                    stem = file_path.stem
+                    # Remove gt_ prefix (case-insensitive)
+                    if stem.lower().startswith("gt_"):
+                        stem = stem[3:]
+                    key = stem.strip()
                     gt_files[key] = file_path
     
     print(f"✓ Found {len(audio_files)} audio files")

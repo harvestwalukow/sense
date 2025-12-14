@@ -15,18 +15,53 @@ from num2words import num2words
 
 
 def get_clean_text_from_docx(docx_file: str | Path) -> str:
-    """Baca dan bersihkan teks dari file DOCX dengan Error Handling"""
+    """Baca dan bersihkan teks dari file Ground Truth (DOCX/TXT/JSON).
+
+    Nama fungsi dipertahankan untuk kompatibilitas, tapi sekarang mendukung:
+    - .docx: dibaca via python-docx
+    - .txt: dibaca sebagai plain text
+    - .json: mencoba ambil field 'text' atau stringify
+    """
     if not docx_file:
         return ""
     
     docx_path = Path(docx_file)
+
+    if not docx_path.exists():
+        print(f"  ⚠ SKIP: File Ground Truth tidak ditemukan: {docx_path.name}")
+        print(f"  ⚠ Path: {docx_path}")
+        return ""
+
+    ext = docx_path.suffix.lower()
+
+    # Plain text ground truth
+    if ext == ".txt":
+        try:
+            return docx_path.read_text(encoding="utf-8", errors="ignore")
+        except Exception as e:
+            print(f"  ⚠ SKIP: Gagal membaca Ground Truth TXT: {docx_path.name}")
+            print(f"  ⚠ Reason: {e}")
+            return ""
+
+    # JSON ground truth (optional)
+    if ext == ".json":
+        try:
+            obj = json.loads(docx_path.read_text(encoding="utf-8", errors="ignore"))
+            if isinstance(obj, dict) and "text" in obj:
+                return str(obj["text"])
+            return json.dumps(obj, ensure_ascii=False)
+        except Exception as e:
+            print(f"  ⚠ SKIP: Gagal membaca Ground Truth JSON: {docx_path.name}")
+            print(f"  ⚠ Reason: {e}")
+            return ""
     
     try:
-        # Coba buka file
+        # DOCX ground truth
         doc = docx.Document(str(docx_path))
     except (zipfile.BadZipFile, Exception) as e:
         # JIKA ERROR: Cetak pesan warning, tapi JANGAN stop program
-        print(f"  ⚠ SKIP: File Ground Truth rusak/corrupt: {docx_path.name}")
+        # Catatan: python-docx juga melempar error serupa jika file bukan DOCX valid.
+        print(f"  ⚠ SKIP: File Ground Truth tidak bisa dibaca sebagai DOCX: {docx_path.name}")
         print(f"  ⚠ Reason: {e}")
         return ""  # Kembalikan teks kosong
     
