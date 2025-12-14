@@ -15,9 +15,13 @@ ENV/
 instance/
 .webassets-cache
 
-# Storage - EXCLUDE ALL DATA
-storage/
+# Storage - keep folders, ignore data (track only .gitkeep)
+# NOTE: Git tidak menyimpan folder kosong, jadi kita pakai .gitkeep.
+storage/*
 !storage/.gitkeep
+!storage/**/
+storage/**/*
+!storage/**/.gitkeep
 
 # AI Models (akan di-download otomatis)
 *.pt
