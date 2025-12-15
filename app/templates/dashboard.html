@@ -163,7 +163,7 @@
 
       <!-- Search Bar -->
       <div class="mb-3">
-        <input type="text" class="form-control" id="searchInput" placeholder="Cari berdasarkan kode audio atau label partisipan...">
+        <input type="text" class="form-control" id="searchInput" placeholder="Cari berdasarkan kode audio atau nama file...">
       </div>
 
       <div class="table-responsive">
@@ -175,8 +175,6 @@
               </th>
               <th>Kode Audio</th>
               <th>Nama File</th>
-              <th>Label Partisipan</th>
-              <th>Tanggal</th>
               <th>Emosi Dominan</th>
               <th>Status</th>
               <th width="120">Action</th>
@@ -184,7 +182,7 @@
           </thead>
           <tbody>
             {% for record in records %}
-            <tr data-record-id="{{ record.id }}" data-search-text="{{ (record.id + ' ' + record.get('label_partisipan', '') + ' ' + record.get('audio_name', '')).lower() }}">
+            <tr data-record-id="{{ record.id }}" data-search-text="{{ (record.id + ' ' + record.get('audio_name', '')).lower() }}">
               <td>
                 <input type="checkbox" class="form-check-input record-checkbox" name="selected_ids" value="{{ record.id }}">
               </td>
@@ -192,15 +190,6 @@
                 <div class="fw-semibold">{{ record.id[:8] }}...</div>
               </td>
               <td>{{ record.get('audio_name', '-') }}</td>
-              <td>{{ record.get('label_partisipan', 'N/A') }}</td>
-              <td>
-                {% set created_at = record.get('created_at', '') %}
-                {% if created_at %}
-                  {{ (created_at|replace('T', ' '))[:16] }}
-                {% else %}
-                  -
-                {% endif %}
-              </td>
               <td>
                 <span class="badge bg-primary">{{ record.get('dominant_emotion', 'Neutral') }}</span>
               </td>
@@ -234,7 +223,7 @@ if (durationCtx) {
   const records = {{ records | tojson }};
   
   // Prepare data for each audio file
-  const labels = records.map(r => r.label_partisipan || r.id.substring(0, 8));
+  const labels = records.map(r => r.audio_name || r.id.substring(0, 8));
   const durations = records.map(r => Math.round((r.duration_sec || 0) / 60)); // Convert to minutes
   const emotions = records.map(r => r.dominant_emotion || 'Neutral');
   
@@ -300,7 +289,7 @@ if (durationCtx) {
         x: {
           title: {
             display: true,
-            text: 'File Audio (Label Partisipan)'
+            text: 'File Audio'
           },
           ticks: {
             maxRotation: 45,

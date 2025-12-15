@@ -19,12 +19,12 @@
   </div>
 
   <div class="row g-4">
-    <!-- Header Card Partisipan -->
+    <!-- Header Card -->
     <div class="col-12">
       <div class="card-modern shadow-soft">
         <div class="d-flex justify-content-between align-items-center">
           <div>
-            <h5 class="fw-bold text-primary mb-1">Partisipan: {{ record.get('label_partisipan', 'N/A') }}</h5>
+            <h5 class="fw-bold text-primary mb-1">{{ record.get('audio_name', 'N/A') }}</h5>
           </div>
           <span class="badge bg-primary" style="font-size: 1rem; padding: 0.5rem 1rem;">
             Emosi Dominan: {{ record.get('dominant_emotion', 'Neutral') }}
@@ -67,7 +67,13 @@
             <i class="bi bi-file-text me-2"></i>Transkrip Lengkap
           </h5>
           {% if record.has_gt %}
-            <span class="badge bg-success">GT Attached</span>
+            <div class="d-flex align-items-center gap-2">
+              <span class="badge bg-success">GT Attached</span>
+              {% if record.wer_cer_metrics %}
+                <span class="badge bg-info" title="Word Error Rate">WER: {{ "%.1f"|format(record.wer_cer_metrics.wer * 100) }}%</span>
+                <span class="badge bg-warning text-dark" title="Character Error Rate">CER: {{ "%.1f"|format(record.wer_cer_metrics.cer * 100) }}%</span>
+              {% endif %}
+            </div>
           {% endif %}
         </div>
         <div class="transcript-box">
@@ -89,7 +95,7 @@
           <div class="text-center mb-3">
             <div class="dominant-emotion-badge">
               <h4 class="mb-1">{{ record.get('dominant_emotion', 'Neutral') }}</h4>
-              <small class="text-secondary">Emosi Dominan</small>
+              <small style="color: white !important;">Emosi Dominan</small>
             </div>
           </div>
         </div>

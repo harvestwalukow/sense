@@ -40,7 +40,8 @@ class ProgressTracker:
         """Mark processing as complete"""
         with self._lock:
             self._complete = True
-            self.log("\nSelesai! Proses analisis berhasil diselesaikan.")
+            self._current_step = "Selesai!"
+            self._logs.append("\nSelesai! Proses analisis berhasil diselesaikan.")
     
     def get_progress(self) -> dict:
         """Get current progress state"""

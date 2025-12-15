@@ -327,7 +327,7 @@ a {
 }
 
 .dominant-emotion-badge {
-  background: linear-gradient(135deg, var(--gold) 0%, #ffc107 50%, var(--primary) 100%);
+  background: var(--gold);
   color: white;
   padding: 1.5rem;
   border-radius: 12px;
@@ -469,16 +469,16 @@ a {
 .table thead th {
   font-weight: 600;
   color: var(--primary);
-  border-bottom: 2px solid var(--gold);
-  background: linear-gradient(135deg, #fffef5 0%, #fff9e0 100%);
+  border-bottom: 2px solid #e5e7eb;
+  background: #f8f9fa;
 }
 
 .table-light {
-  background: linear-gradient(135deg, #fffef5 0%, #fff9e0 50%, #f0f7ff 100%) !important;
+  background: #f8f9fa !important;
 }
 
 .table-hover tbody tr:hover {
-  background: rgba(244, 180, 0, 0.08) !important;
+  background: #f1f3f5 !important;
 }
 
 /* Form */
@@ -600,22 +600,22 @@ a {
 
 /* Progress bars */
 .progress {
-  background: rgba(244, 180, 0, 0.15);
+  background: #e9ecef;
   border-radius: 8px;
 }
 
 .progress-bar.bg-primary {
-  background: linear-gradient(90deg, var(--primary) 0%, #1a4a7a 50%, var(--gold) 100%) !important;
+  background: var(--primary) !important;
 }
 
 /* Search Input */
 #searchInput {
-  background: linear-gradient(90deg, #fffef8 0%, #fff 100%);
-  border: 2px solid rgba(244, 180, 0, 0.4);
+  background: #fff;
+  border: 1px solid #d1d5db;
 }
 
 #searchInput:focus {
-  border-color: var(--gold);
+  border-color: var(--primary);
   background: #fff;
 }
 

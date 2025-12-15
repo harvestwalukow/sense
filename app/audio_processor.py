@@ -84,17 +84,44 @@ class AudioProcessor:
         
         # Load MERaLiON-SER Emotion model
         log_progress("Memuat model analisis emosi MERaLiON-SER-v1...")
-        log_progress("INFO: Model berukuran ~3GB, sedang mengunduh dari Hugging Face...")
-        log_progress("INFO: Proses ini hanya terjadi sekali saat pertama kali. Mohon tunggu...")
         
-        emotion_model_name = "MERaLiON/MERaLiON-SER-v1"
+        # Check for local model path first
+        local_model_paths = [
+            os.path.expanduser("~/.cache/huggingface/models--MERaLiON--MERaLiON-SER-v1/snapshots/manual"),
+            os.path.expanduser("~/models/MERaLiON-SER-v1"),
+            os.path.join(os.path.dirname(__file__), "..", "models", "MERaLiON-SER-v1"),
+        ]
+        
+        local_model_path = None
+        for path in local_model_paths:
+            if os.path.exists(path) and os.path.exists(os.path.join(path, "model.safetensors")):
+                local_model_path = path
+                log_progress(f"Ditemukan model lokal di: {path}")
+                break
+        
+        emotion_model_name = local_model_path if local_model_path else "MERaLiON/MERaLiON-SER-v1"
+        
         try:
-            self.emotion_extractor = WhisperFeatureExtractor.from_pretrained(emotion_model_name)
-            log_progress("Feature extractor berhasil dimuat, melanjutkan download model...")
-            self.emotion_model = AutoModelForAudioClassification.from_pretrained(
-                emotion_model_name,
-                trust_remote_code=True
-            )
+            if local_model_path:
+                log_progress("Memuat model dari path lokal...")
+                self.emotion_extractor = WhisperFeatureExtractor.from_pretrained(
+                    local_model_path, 
+                    local_files_only=True
+                )
+                self.emotion_model = AutoModelForAudioClassification.from_pretrained(
+                    local_model_path,
+                    trust_remote_code=True,
+                    local_files_only=True
+                )
+            else:
+                log_progress("INFO: Model berukuran ~3GB, sedang mengunduh dari Hugging Face...")
+                log_progress("INFO: Proses ini hanya terjadi sekali saat pertama kali. Mohon tunggu...")
+                self.emotion_extractor = WhisperFeatureExtractor.from_pretrained(emotion_model_name)
+                log_progress("Feature extractor berhasil dimuat, melanjutkan download model...")
+                self.emotion_model = AutoModelForAudioClassification.from_pretrained(
+                    emotion_model_name,
+                    trust_remote_code=True
+                )
         except Exception as e:
             log_progress(f"Error saat memuat model: {e}")
             log_progress("Mencoba lagi...")
