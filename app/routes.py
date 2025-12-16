@@ -50,6 +50,7 @@ from .evaluation import evaluate_transcript, get_clean_text_from_docx
 from .batch_processor import extract_and_discover_files, batch_process_audio_files
 from .progress_tracker import get_tracker, reset_tracker
 from .lexrank_summarizer import get_lexrank_summarizer
+from .ollama_summarizer import get_ollama_summarizer
 
 
 bp = Blueprint("main", __name__)
@@ -584,7 +585,7 @@ def dashboard():
     all_text = " ".join(r.get("transcript", "") for r in records)
     words = re.findall(r"\b[a-zA-Z]{4,}\b", all_text.lower())
     word_freq = {}
-    stopwords = {'yang', 'untuk', 'pada', 'ke', 'para', 'namun', 'menurut', 'antara', 'dia', 'dua', 'ia', 'seperti', 'jika', 'jika', 'sehingga', 'kembali', 'dan', 'tidak', 'ini', 'karena', 'kepada', 'oleh', 'saat', 'harus', 'sementara', 'setelah', 'belum', 'kami', 'sekitar', 'bagi', 'serta', 'di', 'dari', 'telah', 'sebagai', 'masih', 'hal', 'ketika', 'adalah', 'itu', 'dalam', 'bisa', 'bahwa', 'atau', 'hanya', 'kita', 'dengan', 'akan', 'juga', 'ada', 'mereka', 'sudah', 'saya', 'terhadap', 'secara', 'agar', 'lain', 'anda', 'begitu', 'mengapa', 'kenapa', 'yaitu', 'yakni', 'daripada', 'itulah', 'lagi', 'maka', 'tentang', 'demi', 'dimana', 'kemana', 'pula', 'sambil', 'sebelum', 'sesudah', 'supaya', 'guna', 'kah', 'pun', 'sampai', 'sedangkan', 'selagi', 'sementara', 'tetapi', 'apakah', 'kecuali', 'sebab', 'selain', 'seolah', 'seraya', 'seterusnya', 'tanpa', 'agak', 'boleh', 'dapat', 'dsb', 'dst', 'dll', 'dahulu', 'dulunya', 'anu', 'demikian', 'tapi', 'ingin', 'juga', 'nggak', 'mari', 'nanti', 'melainkan', 'oh', 'ok', 'seharusnya', 'sebetulnya', 'setiap', 'setidaknya', 'sesuatu', 'pasti', 'saja', 'toh', 'ya', 'walau', 'tolong', 'tentu', 'amat', 'apalagi', 'bagaimanapun', 'kalau', 'kayak', 'apa', 'jadi', 'terus', 'kak', 'kan'}
+    stopwords = {'yang', 'untuk', 'pada', 'ke', 'para', 'namun', 'menurut', 'antara', 'dia', 'dua', 'ia', 'seperti', 'jika', 'sehingga', 'kembali', 'dan', 'tidak', 'ini', 'karena', 'kepada', 'oleh', 'saat', 'harus', 'sementara', 'setelah', 'belum', 'kami', 'sekitar', 'bagi', 'serta', 'di', 'dari', 'telah', 'sebagai', 'masih', 'hal', 'ketika', 'adalah', 'itu', 'dalam', 'bisa', 'bahwa', 'atau', 'hanya', 'kita', 'dengan', 'akan', 'juga', 'ada', 'mereka', 'sudah', 'saya', 'terhadap', 'secara', 'agar', 'lain', 'anda', 'begitu', 'mengapa', 'kenapa', 'yaitu', 'yakni', 'daripada', 'itulah', 'lagi', 'maka', 'tentang', 'demi', 'dimana', 'kemana', 'pula', 'sambil', 'sebelum', 'sesudah', 'supaya', 'guna', 'kah', 'pun', 'sampai', 'sedangkan', 'selagi', 'sementara', 'tetapi', 'apakah', 'kecuali', 'sebab', 'selain', 'seolah', 'seraya', 'seterusnya', 'tanpa', 'agak', 'boleh', 'dapat', 'dsb', 'dst', 'dll', 'dahulu', 'dulunya', 'anu', 'demikian', 'tapi', 'ingin', 'juga', 'nggak', 'mari', 'nanti', 'melainkan', 'oh', 'ok', 'seharusnya', 'sebetulnya', 'setiap', 'setidaknya', 'sesuatu', 'pasti', 'saja', 'toh', 'ya', 'walau', 'tolong', 'tentu', 'amat', 'apalagi', 'bagaimanapun', 'kalau', 'kayak', 'apa', 'jadi', 'terus', 'kak', 'kan', 'sih', 'nah', 'tadi', 'mungkin', 'kemudian', 'misalnya','lebih', 'sama', 'bagaimana', 'lebih', 'oke', 'gitu', 'mana', 'dulu', 'sebenarnya', 'mau', 'baik'}
     for w in words:
         if w not in stopwords:
             word_freq[w] = word_freq.get(w, 0) + 1
@@ -614,6 +615,119 @@ def audio_detail(record_id: str):
         return redirect(url_for("main.dashboard"))
     
     return render_template("audio_detail.html", record=record)
+
+
+@bp.route("/audio/<record_id>/download-transcript")
+def download_transcript(record_id: str):
+    """Download transkrip individual sebagai file TXT"""
+    record = _load_record(record_id)
+    if not record:
+        flash("Rekaman tidak ditemukan.", "danger")
+        return redirect(url_for("main.dashboard"))
+    
+    transcript = record.get("transcript", "")
+    if not transcript:
+        flash("Transkrip tidak tersedia.", "warning")
+        return redirect(url_for("main.audio_detail", record_id=record_id))
+    
+    # Create filename from audio name
+    audio_name = record.get("audio_name", record_id)
+    # Remove extension and add _transcript.txt
+    base_name = Path(audio_name).stem if audio_name else record_id
+    filename = f"{base_name}_transcript.txt"
+    
+    # Create response with transcript content
+    buffer = BytesIO(transcript.encode("utf-8"))
+    buffer.seek(0)
+    
+    return send_file(
+        buffer,
+        mimetype="text/plain",
+        as_attachment=True,
+        download_name=filename
+    )
+
+
+@bp.route("/download-all-transcripts")
+def download_all_transcripts():
+    """Download semua transkrip sebagai file ZIP"""
+    import zipfile
+    
+    records = _list_all_records()
+    if not records:
+        flash("Tidak ada rekaman untuk didownload.", "warning")
+        return redirect(url_for("main.dashboard"))
+    
+    # Create ZIP file in memory
+    zip_buffer = BytesIO()
+    
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+        for record in records:
+            transcript = record.get("transcript", "")
+            if not transcript:
+                continue
+            
+            # Create filename from audio name
+            audio_name = record.get("audio_name", record.get("id", "unknown"))
+            base_name = Path(audio_name).stem if audio_name else record.get("id", "unknown")
+            filename = f"{base_name}_transcript.txt"
+            
+            # Add to ZIP
+            zip_file.writestr(filename, transcript.encode("utf-8"))
+    
+    zip_buffer.seek(0)
+    
+    # Generate filename with timestamp
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    zip_filename = f"SENSE_Transcripts_{timestamp}.zip"
+    
+    return send_file(
+        zip_buffer,
+        mimetype="application/zip",
+        as_attachment=True,
+        download_name=zip_filename
+    )
+
+@bp.route("/audio/<record_id>/extract-identities", methods=["POST"])
+def extract_identities(record_id: str):
+    """Ekstrak identitas partisipan dari transkrip menggunakan Ollama GPT-OSS"""
+    try:
+        record = _load_record(record_id)
+        if not record:
+            return jsonify({"success": False, "error": "Rekaman tidak ditemukan"}), 404
+        
+        # Get transcript
+        transcript = record.get("transcript", "")
+        if not transcript:
+            return jsonify({"success": False, "error": "Transkrip tidak tersedia"}), 400
+        
+        # Initialize Ollama summarizer
+        summarizer = get_ollama_summarizer()
+        
+        if not summarizer.is_configured():
+            return jsonify({
+                "success": False, 
+                "error": "Ollama API key tidak dikonfigurasi. Set OLLAMA_API_KEY di environment."
+            }), 400
+        
+        # Extract identities
+        identities = summarizer.extract_identities(transcript)
+        
+        # Save to record
+        record['identities'] = identities
+        _save_record(record_id, record)
+        
+        return jsonify({
+            "success": True,
+            "identities": identities
+        })
+    
+    except Exception as e:
+        current_app.logger.error(f"Error extracting identities: {e}", exc_info=True)
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
 
 
 @bp.route("/audio/<record_id>/generate-lexrank-summary", methods=["POST"])
@@ -652,9 +766,91 @@ def generate_lexrank_summary(record_id: str):
         }), 500
 
 
+@bp.route("/audio/<record_id>/generate-ollama-summary", methods=["POST"])
+def generate_ollama_summary(record_id: str):
+    """Generate summary untuk single audio menggunakan Ollama GPT-OSS"""
+    try:
+        record = _load_record(record_id)
+        if not record:
+            return jsonify({"success": False, "error": "Rekaman tidak ditemukan"}), 404
+        
+        # Get transcript
+        transcript = record.get("transcript", "")
+        if not transcript:
+            return jsonify({"success": False, "error": "Transkrip tidak tersedia"}), 400
+        
+        # Initialize Ollama summarizer
+        summarizer = get_ollama_summarizer()
+        
+        if not summarizer.is_configured():
+            return jsonify({
+                "success": False, 
+                "error": "Ollama API key tidak dikonfigurasi. Set OLLAMA_API_KEY di environment."
+            }), 400
+        
+        # Generate summary
+        result = summarizer.generate_summary_4_points(transcript)
+        
+        # Save summary to record
+        record['ollama_summary'] = result
+        _save_record(record_id, record)
+        
+        return jsonify({
+            "success": True,
+            "summary": result
+        })
+    
+    except Exception as e:
+        current_app.logger.error(f"Error generating Ollama summary: {e}", exc_info=True)
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+@bp.route("/audio/<record_id>/generate-ollama-summary-stream")
+def generate_ollama_summary_stream(record_id: str):
+    """Generate summary dengan streaming menggunakan Ollama GPT-OSS"""
+    from flask import Response
+    
+    def generate():
+        try:
+            record = _load_record(record_id)
+            if not record:
+                yield f"data: {json.dumps({'error': 'Rekaman tidak ditemukan', 'done': True})}\n\n"
+                return
+            
+            transcript = record.get("transcript", "")
+            if not transcript:
+                yield f"data: {json.dumps({'error': 'Transkrip tidak tersedia', 'done': True})}\n\n"
+                return
+            
+            summarizer = get_ollama_summarizer()
+            
+            if not summarizer.is_configured():
+                yield f"data: {json.dumps({'error': 'API key tidak dikonfigurasi', 'done': True})}\n\n"
+                return
+            
+            stream = summarizer.generate_summary_4_points(transcript, stream=True)
+            
+            for chunk in stream:
+                yield f"data: {json.dumps(chunk)}\n\n"
+                
+                # Save final result
+                if chunk.get('done') and 'summary' in chunk:
+                    record['ollama_summary'] = chunk['summary']
+                    _save_record(record_id, record)
+        
+        except Exception as e:
+            yield f"data: {json.dumps({'error': str(e), 'done': True})}\n\n"
+    
+    return Response(generate(), mimetype='text/event-stream')
+
 @bp.route("/summary", methods=["GET", "POST"])
 def summary():
     """Generate summary batch untuk record yang dipilih"""
+    summarizer_method = "lexrank"  # default
+    
     if request.method == "GET":
         batch_id = request.args.get("batch")
         if batch_id:
@@ -663,10 +859,13 @@ def summary():
                 flash("Batch tidak ditemukan.", "danger")
                 return redirect(url_for("main.dashboard"))
             selected_ids = batch["selected_ids"]
+            summarizer_method = batch.get("summarizer", "lexrank")
         else:
             selected_ids = request.args.getlist("ids")
+            summarizer_method = request.args.get("summarizer", "lexrank")
     else:
         selected_ids = request.form.getlist("selected_ids")
+        summarizer_method = request.form.get("summarizer", "lexrank")
         if not selected_ids:
             # Check if "all" was selected
             if request.form.get("generate_all") == "true":
@@ -687,9 +886,12 @@ def summary():
         flash("Tidak ada rekaman yang valid.", "danger")
         return redirect(url_for("main.dashboard"))
     
-    # Generate combined summary using LexRank
+    # Generate combined summary using selected method
     try:
-        combined_summary_4p = _generate_combined_summary(selected_records)
+        if summarizer_method == "ollama":
+            combined_summary_4p = _generate_combined_summary_ollama(selected_records)
+        else:
+            combined_summary_4p = _generate_combined_summary(selected_records)
     except Exception as e:
         current_app.logger.error(f"Error generating summary: {e}", exc_info=True)
         flash(f"⚠️ Error generating summary: {str(e)}", "warning")
@@ -708,11 +910,12 @@ def summary():
         "selected_count": len(selected_records),
         "combined_summary_4p": combined_summary_4p,
         "created_at": datetime.now().isoformat(),
-        "summarizer": "lexrank"
+        "summarizer": summarizer_method
     }
     _save_batch(batch_id, batch_data)
     
-    return render_template("summary.html", records=selected_records, summaries=combined_summary_4p, batch_id=batch_id, summarizer="lexrank")
+    return render_template("summary.html", records=selected_records, summaries=combined_summary_4p, batch_id=batch_id, summarizer=summarizer_method)
+
 
 
 def _generate_combined_summary(selected_records: List[Dict]) -> Dict[str, List[str]]:
@@ -805,6 +1008,87 @@ def _generate_combined_summary(selected_records: List[Dict]) -> Dict[str, List[s
     print(f"Preferensi: {len(result['preferensi'])} points")
     
     return result
+
+
+def _generate_combined_summary_ollama(selected_records: List[Dict]) -> Dict[str, List[str]]:
+    """Generate combined summary 4 poin dari selected records using Ollama GPT-OSS"""
+    print("\n" + "="*60)
+    print("GENERATING COMBINED SUMMARY WITH OLLAMA GPT-OSS")
+    print("="*60)
+    print(f"Processing {len(selected_records)} records...")
+    
+    # Combine all transcripts
+    all_transcripts = []
+    for record in selected_records:
+        transcript = record.get("transcript", "")
+        if transcript:
+            all_transcripts.append(transcript)
+    
+    if not all_transcripts:
+        return {
+            "tantangan": ["Tidak ada transkrip tersedia"],
+            "solusi": ["Tidak ada transkrip tersedia"],
+            "harapan": ["Tidak ada transkrip tersedia"],
+            "preferensi": ["Tidak ada transkrip tersedia"],
+        }
+    
+    combined_text = "\n\n---\n\n".join(all_transcripts)
+    print(f"Combined text: {len(combined_text.split())} words from {len(all_transcripts)} transcripts")
+    
+    try:
+        # Use Ollama summarizer
+        summarizer = get_ollama_summarizer()
+        
+        if not summarizer.is_configured():
+            raise ValueError("Ollama API key tidak dikonfigurasi. Set OLLAMA_API_KEY di environment.")
+        
+        print("Calling Ollama API...")
+        result = summarizer.generate_summary_4_points(combined_text)
+        print("Ollama API response received")
+        
+        # Debug: print raw result
+        print(f"DEBUG - tantangan: '{result.get('tantangan', '')[:100]}...'")
+        print(f"DEBUG - solusi: '{result.get('solusi', '')[:100]}...'")
+        print(f"DEBUG - harapan: '{result.get('harapan', '')[:100]}...'")
+        print(f"DEBUG - preferensi: '{result.get('preferensi', '')[:100]}...'")
+        
+        # If full_summary exists but sections are empty, use full_summary as fallback
+        full_summary = result.get('full_summary', '')
+        if full_summary and not result.get('tantangan'):
+            print("DEBUG - Parsing failed, using full_summary as tantangan")
+            # Just split the full summary evenly
+            lines = [l.strip() for l in full_summary.split('\n') if l.strip()]
+            if len(lines) >= 4:
+                quarter = len(lines) // 4
+                result['tantangan'] = ' '.join(lines[:quarter])
+                result['solusi'] = ' '.join(lines[quarter:quarter*2])  
+                result['harapan'] = ' '.join(lines[quarter*2:quarter*3])
+                result['preferensi'] = ' '.join(lines[quarter*3:])
+            else:
+                result['tantangan'] = full_summary
+        
+        # Parse result into list format for consistency with LexRank
+        def split_to_points(text: str) -> List[str]:
+            """Split text into bullet points"""
+            if not text:
+                return ["Tidak ada data"]
+            # Split by sentences
+            sentences = re.split(r'(?<=[.!?])\s+', text)
+            sentences = [s.strip() for s in sentences if len(s.strip()) > 10]
+            return sentences[:6] if sentences else [text[:300] + "..." if len(text) > 300 else text]
+        
+        return {
+            "tantangan": split_to_points(result.get("tantangan", "")),
+            "solusi": split_to_points(result.get("solusi", "")),
+            "harapan": split_to_points(result.get("harapan", "")),
+            "preferensi": split_to_points(result.get("preferensi", "")),
+        }
+    
+    except Exception as e:
+        print(f"ERROR with Ollama: {e}")
+        import traceback
+        traceback.print_exc()
+        raise
 
 
 @bp.route("/summary/export/pdf")

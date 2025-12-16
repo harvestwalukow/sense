@@ -25,6 +25,14 @@
     transform: scale(1.1);
     filter: brightness(1.05);
   }
+  /* Remove hover effect from Summarize button */
+  #summarizeBtn:hover,
+  #summarizeBtn:focus {
+    background-color: var(--bs-primary);
+    border-color: var(--bs-primary);
+    box-shadow: none;
+    transform: none;
+  }
 </style>
 {% endblock %}
 {% block content %}
@@ -146,15 +154,33 @@
       <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
         <h5 class="fw-bold text-primary mb-0">History Rekaman</h5>
         <div class="d-flex gap-2 flex-wrap">
-          <!-- Single Summarize Button (default: all, if selected: only selected) -->
-          <form method="post" action="{{ url_for('main.summary') }}" id="summaryForm" onsubmit="showSummaryLoading(event, this)">
+          <!-- Summarize Dropdown Button -->
+          <form method="post" action="{{ url_for('main.summary') }}" id="summaryForm">
             <div id="selectedInputs"></div>
             <input type="hidden" name="generate_all" value="true" id="generateAllInput">
-            <button type="submit" class="btn btn-primary" id="summarizeBtn">
-              <i class="bi bi-stars me-2"></i>Summarize
-            </button>
+            <input type="hidden" name="summarizer" id="summarizerInput" value="lexrank">
+            <div class="btn-group" id="summarizeDropdown">
+              <button type="button" class="btn btn-primary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" id="summarizeBtn">
+                <i class="bi bi-stars me-2"></i>Summarize
+              </button>
+              <ul class="dropdown-menu">
+                <li>
+                  <a class="dropdown-item" href="#" onclick="submitWithMethod('lexrank')">
+                    <i class="bi bi-cpu me-2"></i>LexRank
+                  </a>
+                </li>
+                <li>
+                  <a class="dropdown-item" href="#" onclick="submitWithMethod('ollama')">
+                    <i class="bi bi-cloud me-2"></i>GPT-OSS
+                  </a>
+                </li>
+              </ul>
+            </div>
           </form>
           
+          <a href="{{ url_for('main.download_all_transcripts') }}" class="btn btn-outline-success">
+            <i class="bi bi-download me-2"></i>Download Transkrip
+          </a>
           <button type="button" class="btn btn-outline-danger" onclick="confirmDeleteAll()">
             <i class="bi bi-trash me-2"></i>Hapus Semua
           </button>
@@ -175,7 +201,7 @@
               </th>
               <th>Kode Audio</th>
               <th>Nama File</th>
-              <th>Emosi Dominan</th>
+
               <th>Status</th>
               <th width="120">Action</th>
             </tr>
@@ -190,9 +216,7 @@
                 <div class="fw-semibold">{{ record.id[:8] }}...</div>
               </td>
               <td>{{ record.get('audio_name', '-') }}</td>
-              <td>
-                <span class="badge bg-primary">{{ record.get('dominant_emotion', 'Neutral') }}</span>
-              </td>
+
               <td>
                 <span class="badge bg-success">Selesai</span>
               </td>
@@ -415,31 +439,28 @@ function confirmDeleteAll() {
   }
 }
 
-function showSummaryLoading(event, form) {
-  const button = event.submitter || form.querySelector('button[type="submit"]');
+// Submit form with selected summarizer method
+function submitWithMethod(method) {
+  event.preventDefault();
+  
+  // Update hidden input
+  document.getElementById('summarizerInput').value = method;
+  
+  // Show loading state
+  const form = document.getElementById('summaryForm');
+  showSummaryLoading(event, form, method);
+  
+  // Submit the form
+  form.submit();
+}
+
+function showSummaryLoading(event, form, method) {
+  const button = document.getElementById('summarizeBtn');
   
   if (button) {
     button.disabled = true;
-    button.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Generating Summary...';
+    button.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Generating...';
   }
-  
-  // Show loading overlay
-  const loadingDiv = document.createElement('div');
-  loadingDiv.id = 'summaryLoading';
-  loadingDiv.className = 'alert alert-info mt-3';
-  loadingDiv.innerHTML = `
-    <div class="d-flex align-items-center">
-      <div class="spinner-border spinner-border-sm me-2"></div>
-      <strong>Menghasilkan ringkasan dengan LexRank...</strong>
-    </div>
-    <div class="mt-2 small">
-      Proses ini menggunakan LexRank algorithm untuk menganalisis semua transkrip.<br>
-      Waktu proses: ~5-15 detik tergantung jumlah rekaman.<br>
-      Mohon tunggu, jangan refresh halaman.
-    </div>
-  `;
-  
-  form.parentElement.insertAdjacentElement('afterend', loadingDiv);
   
   return true;
 }
