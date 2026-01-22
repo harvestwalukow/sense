@@ -1,17 +1,24 @@
+# Project Creators
+- Devina Yosefin
+- Harvest Ecclesiano Christ Walukow
+- Muhammad Aqeela Bagus Pramudityo
+- Kefas Chrisnanda
+- Nabila Mumtaz
+
 # SENSE - Speech Emotion & Natural language Summarization Engine
 
-🎓 **Aplikasi Analisis Audio untuk Penelitian Mahasiswa Pascasarjana**
+**Aplikasi Analisis Audio untuk Penelitian Mahasiswa**
 
 Sistem analisis audio cerdas yang menggunakan AI untuk transkripsi, deteksi emosi, dan summarisasi otomatis dari wawancara mahasiswa S2. Dibangun dengan Flask dan terintegrasi dengan model AI terkini.
 
-## ✨ Fitur Utama
+## Fitur Utama
 
-### 🎤 Audio Processing
+### Audio Processing
 - **Transkripsi Otomatis**: Menggunakan OpenAI Whisper Large-v3 untuk transkripsi Bahasa Indonesia
 - **Deteksi Emosi**: Wav2Vec2 untuk analisis emosi (Netral, Senang, Sedih, Marah)
 - **Multi-Format Support**: MP3, WAV, M4A, AAC, OGG, FLAC, WMA
 
-### 📊 Analysis & Insights
+### Analysis & Insights
 - **Topic Segmentation**: Otomatis membagi transkrip ke topik (Tantangan, Strategi, Harapan, Preferensi)
 - **Smart Summarization**: 
   - **LexRank**: Summarization lokal (cepat, gratis)
@@ -19,18 +26,18 @@ Sistem analisis audio cerdas yang menggunakan AI untuk transkripsi, deteksi emos
 - **Emotion Distribution**: Visualisasi distribusi emosi per segmen
 - **WER/CER Evaluation**: Jika ground truth tersedia
 
-### 🔄 Real-time Progress
+### Real-time Progress
 - Live logging untuk setiap tahap pemrosesan
 - Progress tracking untuk user experience yang lebih baik
 - Tampilan real-time hasil transkripsi
 
-### 📈 Dashboard & Reporting
+### Dashboard & Reporting
 - Dashboard global dengan statistik
 - Export summary ke PDF/CSV
 - History management dengan fitur delete
 - Batch processing untuk multiple files
 
-## 🛠️ Teknologi
+## Teknologi
 
 ### Backend
 - **Flask**: Web framework
@@ -45,7 +52,7 @@ Sistem analisis audio cerdas yang menggunakan AI untuk transkripsi, deteksi emos
 - **JavaScript**: Real-time updates via polling
 - **Responsive Design**: Mobile-friendly
 
-## 🚀 Quick Start
+## Quick Start
 
 ### 1. Clone Repository
 ```bash
@@ -74,7 +81,7 @@ pip install -r requirements.txt
 python setup_models.py
 ```
 
-⏱️ **Note**: Model download memakan waktu ~5-10 menit (total ~3.5 GB)
+**Note**: Model download memakan waktu ~5-10 menit (total ~3.5 GB)
 
 ### 5. (Optional) Setup Ollama AI for Advanced Summarization
 
@@ -88,7 +95,7 @@ cp env.example.txt .env
 # OLLAMA_API_KEY=your_api_key_here
 ```
 
-📖 **Panduan lengkap**: Lihat [QUICK_START_OLLAMA.md](QUICK_START_OLLAMA.md)
+**Panduan lengkap**: Lihat [QUICK_START_OLLAMA.md](QUICK_START_OLLAMA.md)
 
 ### 6. Run Application
 ```bash
@@ -97,7 +104,7 @@ python run.py
 
 Buka browser: **http://127.0.0.1:5000**
 
-## ⚙️ Konfigurasi
+## Konfigurasi
 
 ### Hardware Requirements
 
@@ -118,7 +125,7 @@ Buka browser: **http://127.0.0.1:5000**
 | **CPU** | ~30-60 detik per menit audio |
 | **GPU (CUDA)** | ~5-10 detik per menit audio |
 
-## 📁 Struktur Project
+## Struktur Project
 
 ```
 flask-nlp-dashboard/
@@ -142,7 +149,7 @@ flask-nlp-dashboard/
 └── setup_models.py          # Model downloader
 ```
 
-## 🎯 Use Cases
+## Use Cases
 
 1. **Penelitian Mahasiswa**: Analisis wawancara mahasiswa S2
 2. **Sentiment Analysis**: Deteksi emosi dalam percakapan
@@ -150,7 +157,7 @@ flask-nlp-dashboard/
 4. **Topic Modeling**: Segmentasi otomatis berdasarkan topik
 5. **Summary Generation**: Ringkasan otomatis dari multiple interviews
 
-## 🔧 Troubleshooting
+## Troubleshooting
 
 ### Error: MemoryError saat load model
 **Solusi**: Gunakan model yang lebih kecil di `app/audio_processor.py`:
@@ -175,7 +182,7 @@ self.model_whisper = whisper.load_model("base")  # Instead of "large-v3"
 
 **Note**: Ollama AI bersifat **opsional**. Anda tetap bisa menggunakan LexRank summarization tanpa API key.
 
-## 📸 Screenshots
+## Screenshots
 
 ### Dashboard
 Dashboard global dengan statistik, emotion distribution, dan keyword analysis.
@@ -186,15 +193,15 @@ Real-time progress dengan live transcription output dan step-by-step logging.
 ### Batch Summary
 Generate ringkasan kombinasi dari multiple audio files dengan 4 kategori utama.
 
-## 📝 License
+## License
 
 MIT License - Feel free to use for academic or commercial purposes
 
-## 👥 Contributors
+## Contributors
 
 Developed for academic research at **Universitas Airlangga**
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - **OpenAI Whisper** for speech recognition
 - **Hugging Face Transformers** for emotion detection
